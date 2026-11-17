@@ -1,6 +1,30 @@
 // Generasi kota "Teluk Cerah": grid jalan, blok bangunan per distrik, props.
 // Semua deterministik dari seed yang sama.
-import { COLORS, ROAD_OFFSET, ROAD_SPACING, ROAD_WIDTH, WORLD } from './config.js';
+//
+// PERINGATAN: urutan pemanggilan RNG di createCity adalah kontrak —
+// layout kota (dan screenshot) diturunkan dari urutan itu. Helper-helper
+// di bawah hanya memindahkan blok kode ke fungsi bernama; mereka dipanggil
+// dalam urutan yang persis sama seperti sebelumnya, dengan argumen yang sama.
+import {
+  BLOCK_INSET,
+  BUILDINGS_PER_BLOCK,
+  BUILDING_SIZE,
+  COLORS,
+  CONTAINER_AREA,
+  CONTAINER_COLORS,
+  CONTAINER_COUNT,
+  CONTAINER_SIZE,
+  DISTRICT_CBD_X,
+  DISTRICT_MARINA_X,
+  DISTRICT_OLD_TOWN_X,
+  DISTRICT_PORT_Y,
+  ROAD_OFFSET,
+  ROAD_SPACING,
+  ROAD_WIDTH,
+  TREES_PER_BLOCK,
+  TREE_RADIUS,
+  WORLD,
+} from './config.js';
 
 export function roadLines() {
   const lines = [];
@@ -29,11 +53,63 @@ export function nearestRoadPoint(x, y) {
 }
 
 export function districtAt(x, y) {
-  if (y >= 2400) return 'Pelabuhan';
-  if (x < 800) return 'Marina';
-  if (x < 1700) return 'Kota Tua';
-  if (x < 2600) return 'CBD';
+  if (y >= DISTRICT_PORT_Y) return 'Pelabuhan';
+  if (x < DISTRICT_MARINA_X) return 'Marina';
+  if (x < DISTRICT_OLD_TOWN_X) return 'Kota Tua';
+  if (x < DISTRICT_CBD_X) return 'CBD';
   return 'Perumahan';
+}
+
+// Warna + ciri bangunan menurut distrik. CBD melempar koin untuk gedung
+// tinggi — dan lemparan itu (rng.chance) adalah bagian dari urutan RNG,
+// jadi hanya boleh terjadi untuk distrik CBD, persis seperti sebelumnya.
+function buildingStyle(rng, district) {
+  if (district === 'CBD') {
+    return { color: COLORS.buildingCbd, tall: rng.chance(0.5) };
+  }
+  if (district === 'Perumahan') return { color: COLORS.buildingHouse, tall: false };
+  if (district === 'Pelabuhan') return { color: COLORS.buildingPort, tall: false };
+  return { color: COLORS.buildingOld, tall: false };
+}
+
+// Isi satu blok (x0,y0)-(x1,y1) dengan bangunan. Dipanggil sekali per blok,
+// sebelum pohon blok yang sama.
+function fillBlockBuildings(rng, x0, y0, x1, y1, district) {
+  const out = [];
+  const n = rng.int(BUILDINGS_PER_BLOCK.min, BUILDINGS_PER_BLOCK.max);
+  for (let k = 0; k < n; k += 1) {
+    const w = rng.range(BUILDING_SIZE.wMin, BUILDING_SIZE.wMax);
+    const h = rng.range(BUILDING_SIZE.hMin, BUILDING_SIZE.hMax);
+    const bx = x0 + rng.range(0, Math.max(1, x1 - x0 - w));
+    const by = y0 + rng.range(0, Math.max(1, y1 - y0 - h));
+    const { color, tall } = buildingStyle(rng, district);
+    out.push({ x: bx, y: by, w, h, color, tall, district });
+  }
+  return out;
+}
+
+// Pohon di sudut blok. Dipanggil sekali per blok, setelah bangunannya.
+function fillBlockTrees(rng, x0, y0, x1, y1) {
+  const out = [];
+  for (let k = 0; k < rng.int(TREES_PER_BLOCK.min, TREES_PER_BLOCK.max); k += 1) {
+    out.push({ x: rng.range(x0, x1), y: rng.range(y0, y1), r: rng.range(TREE_RADIUS.min, TREE_RADIUS.max) });
+  }
+  return out;
+}
+
+// Kontainer di pelabuhan (selatan). Dipanggil terakhir, setelah semua blok.
+function fillPortContainers(rng) {
+  const out = [];
+  for (let i = 0; i < CONTAINER_COUNT; i += 1) {
+    out.push({
+      x: rng.range(CONTAINER_AREA.xMin, CONTAINER_AREA.xMax),
+      y: rng.range(CONTAINER_AREA.yMin, CONTAINER_AREA.yMax),
+      w: rng.range(CONTAINER_SIZE.wMin, CONTAINER_SIZE.wMax),
+      h: CONTAINER_SIZE.h,
+      color: rng.pick(CONTAINER_COLORS),
+    });
+  }
+  return out;
 }
 
 export function createCity(rng) {
@@ -41,35 +117,19 @@ export function createCity(rng) {
   const buildings = [];
   const trees = [];
   const lamps = [];
-  const containers = [];
 
-  // Bangunan mengisi tiap blok di antara dua jalan.
+  // Bangunan + pohon mengisi tiap blok di antara dua jalan.
   for (let i = 0; i < lines.length - 1; i += 1) {
     for (let j = 0; j < lines.length - 1; j += 1) {
-      const x0 = lines[i] + ROAD_WIDTH / 2 + 24;
-      const y0 = lines[j] + ROAD_WIDTH / 2 + 24;
-      const x1 = lines[i + 1] - ROAD_WIDTH / 2 - 24;
-      const y1 = lines[j + 1] - ROAD_WIDTH / 2 - 24;
+      const x0 = lines[i] + ROAD_WIDTH / 2 + BLOCK_INSET;
+      const y0 = lines[j] + ROAD_WIDTH / 2 + BLOCK_INSET;
+      const x1 = lines[i + 1] - ROAD_WIDTH / 2 - BLOCK_INSET;
+      const y1 = lines[j + 1] - ROAD_WIDTH / 2 - BLOCK_INSET;
       const cx = (x0 + x1) / 2;
       const cy = (y0 + y1) / 2;
       const district = districtAt(cx, cy);
-      const n = rng.int(1, 3);
-      for (let k = 0; k < n; k += 1) {
-        const w = rng.range(70, 150);
-        const h = rng.range(60, 130);
-        const bx = x0 + rng.range(0, Math.max(1, x1 - x0 - w));
-        const by = y0 + rng.range(0, Math.max(1, y1 - y0 - h));
-        let color = COLORS.buildingOld;
-        let tall = false;
-        if (district === 'CBD') { color = COLORS.buildingCbd; tall = rng.chance(0.5); }
-        else if (district === 'Perumahan') color = COLORS.buildingHouse;
-        else if (district === 'Pelabuhan') color = COLORS.buildingPort;
-        buildings.push({ x: bx, y: by, w, h, color, tall, district });
-      }
-      // Pohon di sudut blok.
-      for (let k = 0; k < rng.int(2, 5); k += 1) {
-        trees.push({ x: rng.range(x0, x1), y: rng.range(y0, y1), r: rng.range(8, 14) });
-      }
+      buildings.push(...fillBlockBuildings(rng, x0, y0, x1, y1, district));
+      trees.push(...fillBlockTrees(rng, x0, y0, x1, y1));
     }
   }
   // Lampu jalan di tiap persimpangan.
@@ -78,30 +138,30 @@ export function createCity(rng) {
       lamps.push({ x: lx + ROAD_WIDTH / 2 + 8, y: ly + ROAD_WIDTH / 2 + 8 });
     }
   }
-  // Kontainer di pelabuhan (selatan).
-  for (let i = 0; i < 40; i += 1) {
-    containers.push({
-      x: rng.range(200, 3000), y: rng.range(2500, 3100),
-      w: rng.range(50, 90), h: 26,
-      color: rng.pick(['#c25e3a', '#3a7d5e', '#7a5ea8', '#b8a03a']),
-    });
-  }
+  const containers = fillPortContainers(rng);
 
   return { lines, buildings, trees, lamps, containers };
+}
+
+// Titik terdekat pada sebuah persegi (bx,by,bw,bh) dari titik (x,y).
+function nearestPointOnRect(bx, by, bw, bh, x, y) {
+  return {
+    x: Math.max(bx, Math.min(x, bx + bw)),
+    y: Math.max(by, Math.min(y, by + bh)),
+  };
 }
 
 // Dorong lingkaran (x,y,r) keluar dari bangunan; kembalikan posisi terkoreksi.
 export function collideBuildings(city, x, y, r) {
   for (const b of city.buildings) {
-    const nx = Math.max(b.x, Math.min(x, b.x + b.w));
-    const ny = Math.max(b.y, Math.min(y, b.y + b.h));
-    const dx = x - nx;
-    const dy = y - ny;
+    const n = nearestPointOnRect(b.x, b.y, b.w, b.h, x, y);
+    const dx = x - n.x;
+    const dy = y - n.y;
     const d2 = dx * dx + dy * dy;
     if (d2 < r * r && d2 > 0.01) {
       const d = Math.sqrt(d2);
-      x = nx + (dx / d) * r;
-      y = ny + (dy / d) * r;
+      x = n.x + (dx / d) * r;
+      y = n.y + (dy / d) * r;
     } else if (d2 <= 0.01) {
       // Tepat di dalam bangunan: dorong ke sisi terdekat.
       const left = x - b.x; const right = b.x + b.w - x;

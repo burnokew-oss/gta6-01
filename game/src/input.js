@@ -1,11 +1,29 @@
 // Input keyboard + mouse. Aksi sekali-tekan dikonsumsi lewat takeActions()
 // supaya menu dan interaksi tidak ke-trigger dua kali.
+//
+// Satu tombol fisik bisa memetakan ke satu nama aksi (KEYMAP) dan satu nama
+// aksi bisa memetakan ke satu bit aksi sekali-tekan (ACTION_BIT). Tombol
+// gerak + rem menahan scroll halaman, jadi default browser-nya dicegah.
 export const ACTION_CONFIRM = 1;
 export const ACTION_PAUSE = 2;
 export const ACTION_ENTER = 4;
 export const ACTION_STEAL = 8;
 export const ACTION_RELOAD = 16;
 export const ACTION_MUTE = 32;
+
+// Nama aksi yang menghasilkan satu bit aksi sekali-tekan saat ditekan
+// (bukan saat ditahan / repeat).
+const ACTION_BIT = {
+  confirm: ACTION_CONFIRM,
+  pause: ACTION_PAUSE,
+  enter: ACTION_ENTER,
+  steal: ACTION_STEAL,
+  reload: ACTION_RELOAD,
+  mute: ACTION_MUTE,
+};
+
+// Tombol yang default browser-nya dicegah (panah + spasi = scroll halaman).
+const PREVENT_DEFAULT_ACTIONS = new Set(['up', 'down', 'left', 'right', 'brake']);
 
 const KEYMAP = {
   KeyW: 'up', ArrowUp: 'up',
@@ -32,16 +50,9 @@ export function createInput(canvas) {
   function onKeyDown(e) {
     const name = KEYMAP[e.code];
     if (name) {
-      if (!e.repeat) {
-        if (name === 'confirm') actions |= ACTION_CONFIRM;
-        if (name === 'pause') actions |= ACTION_PAUSE;
-        if (name === 'enter') actions |= ACTION_ENTER;
-        if (name === 'steal') actions |= ACTION_STEAL;
-        if (name === 'reload') actions |= ACTION_RELOAD;
-        if (name === 'mute') actions |= ACTION_MUTE;
-      }
+      if (!e.repeat && ACTION_BIT[name]) actions |= ACTION_BIT[name];
       keys[name] = true;
-      if (['up', 'down', 'left', 'right', 'brake'].includes(name)) e.preventDefault();
+      if (PREVENT_DEFAULT_ACTIONS.has(name)) e.preventDefault();
     }
     if (e.code === 'Space') e.preventDefault();
   }
@@ -62,12 +73,17 @@ export function createInput(canvas) {
   }
   function onMouseUp() { mouse.down = false; }
 
+  function clearKeys() {
+    for (const k in keys) keys[k] = false;
+    mouse.down = false;
+  }
+
   window.addEventListener('keydown', onKeyDown);
   window.addEventListener('keyup', onKeyUp);
   canvas.addEventListener('mousemove', onMouseMove);
   canvas.addEventListener('mousedown', onMouseDown);
   window.addEventListener('mouseup', onMouseUp);
-  window.addEventListener('blur', () => { for (const k in keys) keys[k] = false; mouse.down = false; });
+  window.addEventListener('blur', clearKeys);
 
   return {
     keys, mouse,
