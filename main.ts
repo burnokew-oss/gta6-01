@@ -1,34 +1,62 @@
-// A working gta6-01 entry (Node 22, standard library only): the game is this directory's
-// game/ folder, plain static files a desktop browser loads offline (game/index.html and its ES
-// modules, no library and no network request), and the program hands it in. It copies game/ and
-// screenshots/ from beside this file to /output and writes /output/dossier.json, the summary the
-// judge reads, with the vendored make.fun library. Only the plumbing, not an open world: Block
-// Dodger, a plain 2D canvas game where a paddle dodges falling blocks and catches coins, with a
-// title screen, score, lives and levels, game over and restart, flat colours and no sound. Build
-// your own open-world crime game in its place (three.js or any library you vendor under game/),
-// put your 3 or 4 PNG or JPEG screenshots in screenshots/ (the first by name is the cover) and run it.
+// Teluk Cerah — entrypoint penyerahan gta6-01 (Node 22, stdlib saja).
 //
-// Serve it locally with `node serve.ts`, then open http://localhost:8080.
-// Outside the grader's container, MAKEFUN_OUTPUT_DIR stands in for /output:
+// Tugas program ini kecil dan eksplisit: periksa dulu bahwa entri lengkap
+// (game/index.html ada, tepat 4 screenshot JPG dan masing-masing tidak lebih
+// dari 256 KiB, folder game/ di bawah batas file), lalu salin game/ dan
+// screenshots/ dari sebelah file ini ke direktori output dan tulis
+// dossier.json di sana lewat library make.fun yang sudah di-vendor.
+// Game-nya sendiri statis dan offline: game/index.html + modul ES di
+// game/src/, tanpa library dan tanpa satu pun request jaringan.
+//
+// Di luar container grader, MAKEFUN_OUTPUT_DIR menggantikan /output:
 //   mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts
 
-import { cpSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildDossier } from './vendor/makefun-game.ts';
 
 const here = fileURLToPath(new URL('.', import.meta.url));
 const out = process.env.MAKEFUN_OUTPUT_DIR ?? '/output';
+const gameDir = join(here, 'game');
+const shotsDir = join(here, 'screenshots');
+
+// Validasi 1: entrypoint game harus ada.
+if (!existsSync(join(gameDir, 'index.html'))) {
+  throw new Error('game/index.html tidak ditemukan — entri belum lengkap');
+}
+
+// Validasi 2: tepat 4 screenshot, masing-masing JPG dan <= 256 KiB.
+if (!existsSync(shotsDir)) throw new Error('screenshots/ tidak ditemukan');
+const shots = readdirSync(shotsDir).filter((f) => f.toLowerCase().endsWith('.jpg')).sort();
+if (shots.length !== 4) {
+  throw new Error(`butuh tepat 4 screenshot JPG, ketemu ${shots.length}: ${shots.join(', ')}`);
+}
+for (const shot of shots) {
+  const size = statSync(join(shotsDir, shot)).size;
+  if (size > 262144) throw new Error(`screenshot ${shot} ${size} byte — melebihi 256 KiB`);
+}
+
+// Validasi 3: game/ di bawah batas file (993 file).
+function countFiles(dir) {
+  let n = 0;
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    n += entry.isDirectory() ? countFiles(join(dir, entry.name)) : 1;
+  }
+  return n;
+}
+const gameFiles = countFiles(gameDir);
+if (gameFiles > 993) throw new Error(`game/ berisi ${gameFiles} file — melebihi 993`);
 
 mkdirSync(out, { recursive: true });
-cpSync(join(here, 'game'), join(out, 'game'), { recursive: true });
+cpSync(gameDir, join(out, 'game'), { recursive: true });
 mkdirSync(join(out, 'screenshots'), { recursive: true });
-if (existsSync(join(here, 'screenshots'))) cpSync(join(here, 'screenshots'), join(out, 'screenshots'), { recursive: true });
+cpSync(shotsDir, join(out, 'screenshots'), { recursive: true });
 
-// The scorer's own caps (reference/gate.json): only text_max_bytes shapes the bytes; the others refuse an entry the
-// scorer would refuse (more than 4 screenshots or one over 256 KiB; more than 993 files in game/ or 48 MiB of game
-// files, in all, or a path under game/ over 1000 bytes: game/ counts beside /output's own 1000-entry cap, its
-// screenshots/ and dossier.json).
+// Batas-batas dari reference/gate.json: hanya text_max_bytes yang membentuk
+// byte dossier; sisanya menolak entri yang scorer akan tolak (lebih dari 4
+// screenshot atau satu di atas 256 KiB; lebih dari 993 file di game/ atau
+// 48 MiB total, atau path di bawah game/ lebih dari 1000 byte).
 writeFileSync(
   join(out, 'dossier.json'),
   buildDossier(out, {
@@ -39,3 +67,5 @@ writeFileSync(
     game_path_max_bytes: 1000,
   }),
 );
+
+console.log(`Teluk Cerah diserahkan: ${gameFiles} file game, ${shots.length} screenshot, dossier.json ditulis.`);

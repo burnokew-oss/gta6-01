@@ -11,12 +11,9 @@ import { SCREEN_TITLE, SCREEN_PLAY } from './hud.js';
 function simulate(G, seconds, drive) {
   const steps = Math.round(seconds / STEP);
   for (let i = 0; i < steps; i += 1) {
-    if (drive) {
-      G.input.keys.up = true;
-      G.input.keys.right = i % 240 < 120;
-    }
+    if (drive) G.input.keys.up = true; // lurus di jalan, tanpa belok
     G.stepGame(STEP);
-    if (drive) { G.input.keys.up = false; G.input.keys.right = false; }
+    if (drive) G.input.keys.up = false;
   }
 }
 
@@ -42,8 +39,8 @@ export function stageShot(name, G) {
     spawnParked(G, 6);
     spawnPeds(G, 30);
     G.camera.x = car.x; G.camera.y = car.y;
-    simulate(G, 5, true);
     G.screen = SCREEN_PLAY;
+    simulate(G, 5, true);
     return { screen: SCREEN_PLAY };
   }
   if (name === '3') {
@@ -58,8 +55,8 @@ export function stageShot(name, G) {
     spawnPeds(G, 20);
     addWanted(G, 3);
     G.camera.x = car.x; G.camera.y = car.y;
-    simulate(G, 4, true);
     G.screen = SCREEN_PLAY;
+    simulate(G, 4, true);
     return { screen: SCREEN_PLAY };
   }
   // '4': misi jalan kaki + combat.
@@ -72,6 +69,7 @@ export function stageShot(name, G) {
   startMission(G, 2); // M3 — Utang Lama (combat)
   G.mission.dialog.shown = G.mission.dialog.text.length; // dialog penuh
   G.camera.x = G.player.x; G.camera.y = G.player.y;
+  G.screen = SCREEN_PLAY;
   // Bidik ke musuh terdekat lalu tembak sekali.
   const e = G.enemies[0];
   if (e) {
@@ -80,6 +78,5 @@ export function stageShot(name, G) {
     G.input.mouse.y = G.viewH / 2 + Math.sin(G.player.aimAngle) * 200;
   }
   simulate(G, 1.2, false);
-  G.screen = SCREEN_PLAY;
   return { screen: SCREEN_PLAY };
 }

@@ -94,15 +94,15 @@ export function createHud(canvas) {
     const p = G.player;
     // Kiri atas: cash, health, armor.
     ctx.fillStyle = 'rgba(0,0,0,0.45)';
-    ctx.fillRect(10, 10, 250, 84);
-    text(`$${p.cash}`, 20, 40, 26, '#7dff8a', 'left', 'top');
-    text('HP', 20, 52, 14, '#fff', 'left', 'top');
-    bar(52, 52, 190, 12, p.health / 100, '#e5534b');
-    text('ARMOR', 20, 70, 14, '#fff', 'left', 'top');
-    bar(52, 70, 190, 12, p.armor / 100, '#7fb5ff');
+    ctx.fillRect(10, 10, 250, 112);
+    text(`$${p.cash}`, 20, 16, 24, '#7dff8a', 'left', 'top');
+    text('HP', 20, 48, 14, '#fff', 'left', 'top');
+    bar(52, 48, 190, 12, p.health / 100, '#e5534b');
+    text('ARMOR', 20, 68, 14, '#fff', 'left', 'top');
+    bar(52, 68, 190, 12, p.armor / 100, '#7fb5ff');
     // Senjata + ammo.
     const w = WEAPONS[p.weapon];
-    text(`${w.name}  ${p.weapon === 'fist' ? '∞' : `${p.ammoInMag[p.weapon]} / ${p.ammo[p.weapon]}`}${p.reloadTimer > 0 ? '  (reload...)' : ''}`, 20, 88, 15, '#fff', 'left', 'top');
+    text(`${w.name}  ${p.weapon === 'fist' ? '∞' : `${p.ammoInMag[p.weapon]} / ${p.ammo[p.weapon]}`}${p.reloadTimer > 0 ? '  (reload...)' : ''}`, 20, 90, 15, '#fff', 'left', 'top');
     // Kanan atas: wanted + jam.
     drawStars(G, W - 160, 12);
     const hh = Math.floor(G.clock / 60) % 24;
