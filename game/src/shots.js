@@ -1,79 +1,85 @@
-// The screenshot scenes behind ?shot=start|play|end. Each one plays the real rules forward from a
-// fresh world for a fixed number of steps, steered by a simple autopilot (look ahead each way the
-// paddle could move, keep clear of blocks, chase the lowest coin when that is safe), so the frame
-// is what a short game really looks like and the same seed always gives the same frame.
-import { FIELD, PLAYER, STEP } from './config.js';
-import { EVENT_OVER, KIND_BLOCK } from './world.js';
-import { SCREEN_OVER, SCREEN_PLAY, SCREEN_TITLE } from './render.js';
+// Scene deterministik di balik ?shot=1|2|3|4. Tiap scene memainkan aturan
+// sungguhan maju beberapa detik dari seed tetap, jadi frame yang tertangkap
+// adalah tampilan game yang sebenarnya — bukan mockup.
+import { STEP } from './config.js';
+import { makeVehicle, spawnParked, spawnTraffic } from './vehicles.js';
+import { spawnPeds } from './pedestrians.js';
+import { addWanted } from './police.js';
+import { startMission } from './missions.js';
+import { SCREEN_TITLE, SCREEN_PLAY } from './hud.js';
 
-const START_SECONDS = 5;
-const PLAY_SECONDS = 26;
-const END_LIMIT_SECONDS = 600;
-/**
- * How far ahead, in seconds, the autopilot checks each way it could move: the play scene's pilot
- * looks well ahead and keeps all its lives; the end scene's looks only a moment ahead, so it is
- * caught out once the blocks speed up, as a hurried player is.
- */
-const HORIZON_PLAY = 0.7;
-const HORIZON_END = 0.25;
-const SAMPLE = 1 / 30;
-const DIRECTIONS = [0, -1, 1];
-/** Extra room, each side, it keeps between the paddle and a block. */
-const MARGIN = 10;
-
-/** Seconds until moving in `direction` (-1, 0, 1) runs the paddle into a block; Infinity when it never does. */
-function timeToHit(state, direction, horizon) {
-  const player = state.player;
-  for (let t = SAMPLE; t <= horizon; t += SAMPLE) {
-    const x = Math.min(FIELD.width - player.width, Math.max(0, player.x + direction * PLAYER.speed * t));
-    for (let index = 0; index < state.items.length; index += 1) {
-      const item = state.items[index];
-      if (!item.active || item.kind !== KIND_BLOCK) continue;
-      const y = item.y + item.speed * t;
-      if (y + item.height > player.y && y < player.y + player.height && item.x < x + player.width + MARGIN && item.x + item.width > x - MARGIN) return t;
+function simulate(G, seconds, drive) {
+  const steps = Math.round(seconds / STEP);
+  for (let i = 0; i < steps; i += 1) {
+    if (drive) {
+      G.input.keys.up = true;
+      G.input.keys.right = i % 240 < 120;
     }
+    G.stepGame(STEP);
+    if (drive) { G.input.keys.up = false; G.input.keys.right = false; }
   }
-  return Infinity;
 }
 
-/** Of the safe ways to move, the one toward the lowest coin (or the centre); else the one that is hit last. */
-function autopilot(state, horizon) {
-  const player = state.player;
-  let coin = null;
-  for (let index = 0; index < state.items.length; index += 1) {
-    const item = state.items[index];
-    if (item.active && item.kind !== KIND_BLOCK && (coin === null || item.y > coin.y)) coin = item;
+export function stageShot(name, G) {
+  // Dunia segar untuk tiap scene.
+  G.resetWorld();
+  G.clock = 10 * 60; // siang cerah
+  G.day = 1;
+  if (name === '1') {
+    simulate(G, 4, false);
+    G.screen = SCREEN_TITLE;
+    return { screen: SCREEN_TITLE };
   }
-  const target = coin === null ? FIELD.width / 2 : coin.x + coin.width / 2;
-  const centre = player.x + player.width / 2;
-  const wanted = target > centre + 8 ? 1 : target < centre - 8 ? -1 : 0;
-  let best = wanted;
-  let bestTime = timeToHit(state, wanted, horizon);
-  for (let index = 0; index < DIRECTIONS.length && bestTime !== Infinity; index += 1) {
-    const time = timeToHit(state, DIRECTIONS[index], horizon);
-    if (time > bestTime) {
-      bestTime = time;
-      best = DIRECTIONS[index];
-    }
+  if (name === '2') {
+    // Nyetir sport di jalan ramai + HUD + minimap.
+    const car = makeVehicle(G.rng, 'sport', 1400, 1400, 0);
+    G.vehicles.push(car);
+    G.player.vehicle = car;
+    G.player.onFoot = false;
+    car.driver = G.player;
+    G.player.x = car.x; G.player.y = car.y;
+    spawnTraffic(G, 14);
+    spawnParked(G, 6);
+    spawnPeds(G, 30);
+    G.camera.x = car.x; G.camera.y = car.y;
+    simulate(G, 5, true);
+    G.screen = SCREEN_PLAY;
+    return { screen: SCREEN_PLAY };
   }
-  return best;
-}
-
-/**
- * Set `world` to the named scene (start, play or end; any other name is start) and return the
- * screen to draw over it and the best score to show.
- */
-export function stageShot(name, world) {
-  world.reset();
-  if (name !== 'play' && name !== 'end') {
-    for (let index = 0; index < START_SECONDS / STEP; index += 1) world.step(STEP, 0, true);
-    return { screen: SCREEN_TITLE, best: 0 };
+  if (name === '3') {
+    // Wanted 3, kejar-kejaran polisi.
+    const car = makeVehicle(G.rng, 'sedan', 1400, 1400, 0);
+    G.vehicles.push(car);
+    G.player.vehicle = car;
+    G.player.onFoot = false;
+    car.driver = G.player;
+    G.player.x = car.x; G.player.y = car.y;
+    spawnTraffic(G, 10);
+    spawnPeds(G, 20);
+    addWanted(G, 3);
+    G.camera.x = car.x; G.camera.y = car.y;
+    simulate(G, 4, true);
+    G.screen = SCREEN_PLAY;
+    return { screen: SCREEN_PLAY };
   }
-  const limit = name === 'end' ? END_LIMIT_SECONDS : PLAY_SECONDS;
-  const horizon = name === 'end' ? HORIZON_END : HORIZON_PLAY;
-  for (let index = 0; index < limit / STEP; index += 1) {
-    if (world.step(STEP, autopilot(world.state, horizon), false) & EVENT_OVER) break;
+  // '4': misi jalan kaki + combat.
+  G.player.x = 1250; G.player.y = 1250;
+  G.player.weapon = 'pistol';
+  G.player.ammoInMag.pistol = 12;
+  G.player.ammo.pistol = 48;
+  spawnPeds(G, 24);
+  spawnParked(G, 4);
+  startMission(G, 2); // M3 — Utang Lama (combat)
+  G.mission.dialog.shown = G.mission.dialog.text.length; // dialog penuh
+  G.camera.x = G.player.x; G.camera.y = G.player.y;
+  // Bidik ke musuh terdekat lalu tembak sekali.
+  const e = G.enemies[0];
+  if (e) {
+    G.player.aimAngle = Math.atan2(e.y - G.player.y, e.x - G.player.x);
+    G.input.mouse.x = G.viewW / 2 + Math.cos(G.player.aimAngle) * 200;
+    G.input.mouse.y = G.viewH / 2 + Math.sin(G.player.aimAngle) * 200;
   }
-  const over = world.state.lives === 0;
-  return { screen: over ? SCREEN_OVER : SCREEN_PLAY, best: world.state.score };
+  simulate(G, 1.2, false);
+  G.screen = SCREEN_PLAY;
+  return { screen: SCREEN_PLAY };
 }
