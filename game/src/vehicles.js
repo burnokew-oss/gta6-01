@@ -150,6 +150,20 @@ export function updateVehicles(G, dt) {
       }
     }
   }
+  // Near miss: ngebut melewati traffic sangat dekat = +$25 (sekali per mobil).
+  const pv = G.player.vehicle;
+  if (pv && !G.player.onFoot && Math.abs(pv.speed) > 200) {
+    for (const v of G.vehicles) {
+      if (!v.ai || v.dead || v.nearMissed) continue;
+      const d = Math.hypot(v.x - pv.x, v.y - pv.y);
+      if (d < 52 && d > 30) {
+        v.nearMissed = true;
+        G.player.cash += 25;
+        G.cashFloaters.push({ x: pv.x, y: pv.y - 40, text: 'NEAR MISS +$25', life: 1.2 });
+        if (G.audio) G.audio.pickup();
+      }
+    }
+  }
 }
 
 export function explodeVehicle(G, v) {

@@ -18,6 +18,8 @@ export function createMissionState() {
     rampage: null,
     taxi: null,
     done: false,
+    routeIndex: 0,
+    tail: null, // {vehicle, timer, seconds, radius}
   };
 }
 
@@ -32,6 +34,8 @@ export function startMission(G, index) {
   G.mission.dialog = { speaker: def.giver, text: def.intro, shown: 0 };
   G.mission.objective = def.steps[0].text;
   G.mission.banner = def.title;
+  G.mission.routeIndex = 0;
+  G.mission.tail = null;
   setupStep(G);
 }
 
@@ -49,6 +53,23 @@ function setupStep(G) {
     G.mission.escapeTimer = step.seconds;
   }
   if (step.type === 'goto' && step.wanted) addWanted(G, step.wanted);
+  if (step.type === 'route') {
+    G.mission.routeIndex = 0;
+    G.mission.objective = step.text.replace('%n', String(step.points.length));
+  }
+  if (step.type === 'tail') {
+    // Target: mobil sport merah yang keliling kota di jalur lingkar.
+    const v = { x: step.x, y: step.y, angle: 0, speed: 210, cp: 0, type: 'sport', color: '#c22e2e', len: 46, wid: 22, health: 100, dead: false, ai: null, parked: false, driver: null, flash: 0, accel: 300, top: 260, turn: 3, tailTarget: true };
+    const cx = 1650; const cy = 1650;
+    v.waypoints = [];
+    for (let i = 0; i < 8; i += 1) {
+      const a = (i / 8) * Math.PI * 2;
+      v.waypoints.push({ x: cx + Math.cos(a) * 1050, y: cy + Math.sin(a) * 1050 });
+    }
+    G.vehicles.push(v);
+    G.mission.tail = { vehicle: v, timer: 0, seconds: step.seconds, radius: step.radius };
+    G.mission.objective = `${step.text} — 0/${step.seconds} dtk`;
+  }
   if (step.type === 'race') {
     G.mission.race = {
       checkpoints: raceCheckpoints(G),
@@ -90,6 +111,8 @@ function advanceStep(G) {
 function completeMission(G) {
   const def = MISSION_DEFS[G.mission.index];
   G.player.cash += def.reward;
+  G.rep = (G.rep || 0) + 150;
+  G.stats.missionsDone = (G.stats.missionsDone || 0) + 1;
   G.mission.banner = `MISI SELESAI — ${def.title}  +$${def.reward}`;
   G.cashFloaters.push({ x: G.player.x, y: G.player.y - 40, text: `+$${def.reward}`, life: 1.5 });
   if (G.audio) G.audio.missionDone();
@@ -97,6 +120,8 @@ function completeMission(G) {
   G.mission.step = 0;
   G.mission.started = false;
   G.mission.race = null;
+  G.mission.tail = null;
+  G.mission.routeIndex = 0;
   if (G.mission.index >= MISSION_DEFS.length) {
     G.mission.index = -1;
     G.mission.objective = 'Semua misi selesai! Teluk Cerah milikmu, Raka.';
@@ -136,6 +161,43 @@ export function updateMissions(G, dt) {
   } else if (step.type === 'goto') {
     const d = Math.hypot(p.x - step.x, p.y - step.y);
     if (d < step.r) advanceStep(G);
+  } else if (step.type === 'route') {
+    const pt = step.points[m.routeIndex];
+    if (pt && Math.hypot(p.x - pt.x, p.y - pt.y) < step.r) {
+      m.routeIndex += 1;
+      if (G.audio) G.audio.pickup();
+      if (m.routeIndex >= step.points.length) advanceStep(G);
+      else m.objective = step.text.replace('%n', String(step.points.length - m.routeIndex));
+    }
+  } else if (step.type === 'tail' && m.tail) {
+    const t = m.tail;
+    const v = t.vehicle;
+    // Target melaju mengikuti waypoint lingkar kota.
+    const wp = v.waypoints[v.cp % v.waypoints.length];
+    const dx = wp.x - v.x; const dy = wp.y - v.y;
+    const d = Math.hypot(dx, dy);
+    if (d < 120) { v.cp += 1; } else {
+      const want = Math.atan2(dy, dx);
+      let da = want - v.angle;
+      while (da > Math.PI) da -= Math.PI * 2;
+      while (da < -Math.PI) da += Math.PI * 2;
+      v.angle += Math.max(-2.4 * dt, Math.min(2.4 * dt, da));
+      v.speed = Math.min(v.top, v.speed + v.accel * dt);
+      v.x += Math.cos(v.angle) * v.speed * dt;
+      v.y += Math.sin(v.angle) * v.speed * dt;
+    }
+    const pd = Math.hypot(p.x - v.x, p.y - v.y);
+    if (pd < t.radius) {
+      t.timer += dt;
+      m.objective = `${step.text} — ${Math.floor(t.timer)}/${t.seconds} dtk`;
+      if (t.timer >= t.seconds) {
+        v.tailTarget = false;
+        m.tail = null;
+        advanceStep(G);
+      }
+    } else {
+      m.objective = `${step.text} — ${Math.floor(t.timer)}/${t.seconds} dtk (terlalu jauh!)`;
+    }
   } else if (step.type === 'escape') {
     if (G.wanted <= 0) {
       m.escapeTimer -= dt;
@@ -188,6 +250,10 @@ export function updateMissions(G, dt) {
 export function onMissionEvent(G, ev) {
   const m = G.mission;
   if (ev === 'enemyKilled' && m.rampage) m.rampage.score += 10;
+  if (ev === 'enemyKilled') {
+    G.rep = (G.rep || 0) + 10;
+    G.stats.takedowns = (G.stats.takedowns || 0) + 1;
+  }
   if (ev === 'pedKilled' && m.rampage) m.rampage.score += 5;
   if (ev === 'enemyKilled' && m.started && m.index >= 0) {
     const step = MISSION_DEFS[m.index].steps[m.step];
@@ -198,7 +264,10 @@ export function onMissionEvent(G, ev) {
   }
   if (ev === 'copKilled') addWanted(G, 1);
   if (ev === 'pedKilled') addWanted(G, 1);
-  if (ev === 'stoleCar') addWanted(G, 1);
+  if (ev === 'stoleCar') {
+    addWanted(G, 1);
+    G.stats.carsStolen = (G.stats.carsStolen || 0) + 1;
+  }
   if (ev === 'wasted') {
     G.player.cash = Math.max(0, Math.floor(G.player.cash * 0.9));
     respawn(G, 'hospital');

@@ -43,6 +43,10 @@ export const LOCATIONS = {
   oldTownSquare: { x: 1250, y: 1250 }, // tempat nongkrong penagih, Kota Tua
   cbdShop: { x: 2150, y: 1450 }, // toko kelontong CBD
   eastSafehouse: { x: 2900, y: 450 }, // safehouse Perumahan (timur)
+  cbdPlaza: { x: 2150, y: 950 }, // plaza CBD (tengah-timur)
+  northGate: { x: 950, y: 450 }, // gerbang utara Perumahan
+  portGate: { x: 1650, y: 2900 }, // gerbang pelabuhan
+  marinaBeach: { x: 430, y: 1950 }, // pantai Marina
 };
 export const GOTO_RADIUS = 90;
 export const SAFEHOUSE_RADIUS = 110;
@@ -133,7 +137,89 @@ export const MISSION_DEFS = [
     ],
     reward: 1500,
   },
+  {
+    id: 7, title: 'M7 — Kurir Malam', giver: 'Bu Sari',
+    intro: 'Paket ini harus sampai ke tiga titik sebelum tengah malam: plaza CBD, gerbang utara, lalu pantai Marina. Jangan berhenti, jangan ditangkap.',
+    steps: [
+      { type: 'route', points: [LOCATIONS.cbdPlaza, LOCATIONS.northGate, LOCATIONS.marinaBeach], r: GOTO_RADIUS, text: 'Antar paket ke 3 titik (sisa: %n)' },
+    ],
+    reward: 700,
+  },
+  {
+    id: 8, title: 'M8 — Bayangan', giver: 'Dimas',
+    intro: 'Ada mobil sport merah keliling kota — itu kurir geng rival. Ikuti dari dekat tanpa ketahuan, sampai aku tahu ke mana dia pergi.',
+    steps: [
+      { type: 'tail', ...LOCATIONS.cbdPlaza, seconds: 12, radius: 230, text: 'Ikuti mobil merah dari dekat (jangan sampai hilang)' },
+    ],
+    reward: 800,
+  },
+  {
+    id: 9, title: 'M9 — Heist Pelabuhan', giver: 'Bu Sari',
+    intro: 'Brankas pelabuhan penuh malam ini. Bersihkan penjaganya, ambil isinya, lalu kabur ke safehouse — polisi pasti mengepung.',
+    steps: [
+      { type: 'kill', count: 5, ...LOCATIONS.portWarehouse, text: 'Habisi 5 penjaga brankas pelabuhan' },
+      { type: 'goto', ...LOCATIONS.eastSafehouse, r: SAFEHOUSE_RADIUS, wanted: 4, text: 'Kabur ke safehouse Perumahan (wanted 4!)' },
+    ],
+    reward: 1200,
+  },
+  {
+    id: 10, title: 'M10 — Raja Teluk', giver: 'Bu Sari',
+    intro: 'Ini puncaknya, Raka. Bos geng dan pengawalnya berkumpul di gudang. Habisi mereka, lalu pergi dari pelabuhan — Teluk Cerah jadi milikmu.',
+    steps: [
+      { type: 'kill', count: 6, ...LOCATIONS.portWarehouse, text: 'Habisi bos geng dan 5 pengawalnya' },
+      { type: 'goto', ...LOCATIONS.eastSafehouse, r: SAFEHOUSE_RADIUS, wanted: 3, text: 'Kabur ke safehouse — jangan tertangkap!' },
+    ],
+    reward: 2000,
+  },
 ];
+
+// Respect / Rep: poin dari misi (+150), takedown (+10), lolos kejaran (+50).
+// Tier bernama tampil di HUD, peta, dan ringkasan Continue.
+export const REP_TIERS = [
+  { name: 'Anak Baru', need: 0 },
+  { name: 'Pengemudi Dikenal', need: 300 },
+  { name: 'Pembalap Teluk', need: 800 },
+  { name: 'Raja Jalanan', need: 1500 },
+  { name: 'Legenda Teluk', need: 2600 },
+];
+export function repTier(rep) {
+  let tier = 0;
+  for (let i = 0; i < REP_TIERS.length; i += 1) {
+    if (rep >= REP_TIERS[i].need) tier = i;
+  }
+  const next = REP_TIERS[tier + 1] || null;
+  return { index: tier, name: REP_TIERS[tier].name, next };
+}
+
+// Nama unit polisi (burung Indonesia, ala IBIS/TARPON rank 1).
+export const COP_CAR_NAMES = ['ELANG-11', 'MERAK-23', 'BANGAU-18', 'KAKATUA-31', 'CENDRAWASIH-07', 'JALAK-42'];
+export const COP_FOOT_NAMES = ['GARUDA-02', 'MERPATI-15', 'PERKUTUT-09', 'KENARI-27', 'BONDOL-33', 'CIBLEK-51'];
+export const HELI_NAME = 'GARUDA-1';
+
+// Kolektibel: Kerang Teluk di pinggir jalan (24 di seluruh kota).
+export const SHELL_COUNT = 24;
+
+// Hari dalam seminggu game (hari 1 = Jumat, seperti suasana akhir pekan).
+export const WEEKDAYS = ['Jum', 'Sab', 'Min', 'Sen', 'Sel', 'Rab', 'Kam'];
+
+// Garage upgrades (sistem unik v2 — ber-harga, ada respect gate).
+export const GARAGE_UPGRADES = {
+  engine: { label: 'Mesin Balap', price: 5000, repTier: 3, desc: '+15% top speed (permanen)' },
+  armor: { label: 'Pelat Baja', price: 1800, repTier: 1, desc: 'Armor penuh + tahan benturan' },
+  nitro: { label: 'Nitro Ganda', price: 3000, repTier: 2, desc: 'Tangki NOS 2x lipat' },
+};
+
+// NOS: boost mobil (Shift saat nyetir). Nilai dalam persen tangki.
+export const NOS_MAX = 100;
+export const NOS_DRAIN_PER_SEC = 30;
+export const NOS_REFILL_PER_SEC = 9;
+export const NOS_TOP_MULT = 1.45;
+export const NOS_ACCEL_MULT = 1.8;
+
+// Helikopter polisi: muncul di wanted >= 3.
+export const HELI_MIN_WANTED = 3;
+export const HELI_SPEED = 260;
+export const HELI_HOVER_DIST = 130;
 
 export const SAVE_KEY = 'teluk-cerah-save';
 export const BEST_KEY = 'teluk-cerah-best';

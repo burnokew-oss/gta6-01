@@ -1,7 +1,15 @@
 // Wanted 0-5 bintang + AI polisi (jalan kaki + mobil patroli + roadblock).
-import { COP_CAR_COUNTS, COP_COUNTS, WANTED_DECAY_SECONDS } from './config.js';
+import { COP_CAR_COUNTS, COP_COUNTS, WANTED_DECAY_SECONDS, COP_CAR_NAMES, COP_FOOT_NAMES } from './config.js';
 import { makeVehicle } from './vehicles.js';
 import { damagePlayer } from './vehicles.js';
+import { updateHelicopter } from './helicopter.js';
+
+// Nama unit polisi: tiap unit yang spawn dapat nama tetap dari daftar
+// (bergilir), supaya panel HUD bisa menampilkan "ELANG-11 · RAMMING · 84 m".
+function nextCopName(G, list) {
+  G.copNameSeq = (G.copNameSeq || 0) + 1;
+  return list[(G.copNameSeq - 1) % list.length];
+}
 
 export function addWanted(G, n) {
   const before = G.wanted;
@@ -12,6 +20,7 @@ export function addWanted(G, n) {
 }
 
 export function updatePolice(G, dt) {
+  updateHelicopter(G, dt);
   // Turun perlahan saat tidak terlihat polisi.
   if (G.wanted > 0) {
     let seen = false;
@@ -24,9 +33,16 @@ export function updatePolice(G, dt) {
     if (!seen) {
       G.hiddenTimer += dt;
       if (G.hiddenTimer >= WANTED_DECAY_SECONDS[G.wanted]) {
+        const was = G.wanted;
         G.wanted -= 1;
         G.hiddenTimer = 0;
         G.events.push('wantedDown');
+        if (G.wanted === 0 && was >= 3) {
+          // Lolos dari kejaran besar: +50 Rep.
+          G.rep = (G.rep || 0) + 50;
+          G.stats.escapes = (G.stats.escapes || 0) + 1;
+          G.cashFloaters.push({ x: G.player.x, y: G.player.y - 40, text: 'LOLOS! +50 REP', life: 1.5 });
+        }
       }
     } else {
       G.hiddenTimer = 0;
@@ -48,6 +64,8 @@ export function updatePolice(G, dt) {
     const dx = G.player.x - c.x;
     const dy = G.player.y - c.y;
     const d = Math.hypot(dx, dy);
+    c.dist = Math.round(d / 10);
+    c.status = d < 40 ? 'PENANGKAPAN' : (d < 420 ? 'PENGEJARAN' : 'MENCARI');
     const sp = 150 + G.wanted * 14;
     if (d > 8) {
       c.angle = Math.atan2(dy, dx);
@@ -85,6 +103,8 @@ export function updatePolice(G, dt) {
     const dx = G.player.x - v.x;
     const dy = G.player.y - v.y;
     const d = Math.hypot(dx, dy);
+    v.dist = Math.round(d / 10);
+    v.status = v.roadblockCar ? 'ROADBLOCK' : (d < 130 && Math.abs(v.speed) > 150 ? 'RAMMING' : (d < 700 ? 'PURSUIT' : 'MENCARI'));
     const want = Math.atan2(dy, dx);
     let da = want - v.angle;
     while (da > Math.PI) da -= Math.PI * 2;
@@ -121,6 +141,10 @@ export function updatePolice(G, dt) {
     for (let i = 0; i < 2; i += 1) {
       const v = makeVehicle(G.rng, 'police', G.roadblock.x + i * 60 - 30, G.roadblock.y + (i === 0 ? -40 : 40), Math.PI / 2);
       v.parked = true;
+      v.roadblockCar = true;
+      v.name = nextCopName(G, COP_CAR_NAMES);
+      v.status = 'ROADBLOCK';
+      v.dist = 50;
       G.vehicles.push(v);
     }
   }
@@ -136,7 +160,7 @@ function spawnCop(G) {
   G.cops.push({
     x: G.player.x + Math.cos(a) * r, y: G.player.y + Math.sin(a) * r,
     angle: 0, dead: false, attackTimer: 0, shootTimer: G.rng.range(0.5, 1.5),
-    health: 40,
+    health: 40, name: nextCopName(G, COP_FOOT_NAMES), status: 'PENGEJARAN', dist: 50,
   });
 }
 
@@ -145,5 +169,8 @@ function spawnCopCar(G) {
   const r = G.rng.range(500, 700);
   const v = makeVehicle(G.rng, 'police', G.player.x + Math.cos(a) * r, G.player.y + Math.sin(a) * r, 0);
   v.ai = null;
+  v.name = nextCopName(G, COP_CAR_NAMES);
+  v.status = 'PURSUIT';
+  v.dist = 60;
   G.vehicles.push(v);
 }

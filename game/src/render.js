@@ -1,6 +1,7 @@
 // Renderer: kamera follow + zoom, gambar kota, kendaraan, pejalan, polisi,
 // musuh, partikel, dan tint siang/malam. Semua gambar prosedural (rect/circle).
 import { COLORS, ROAD_WIDTH, WORLD } from './config.js';
+import { SHOP_DEFS } from './shops.js';
 
 export function createRenderer(canvas) {
   const ctx = canvas.getContext('2d');
@@ -188,8 +189,63 @@ export function createRenderer(canvas) {
       ctx.lineTo(s.x + Math.cos(s.angle) * 10, s.y + Math.sin(s.angle) * 10);
       ctx.stroke();
     }
-    // Marker misi (lingkaran kuning berdenyut).
+    // Kerang Teluk (kolektibel): titik emas kecil di pinggir jalan.
+    if (G.shells) {
+      for (const s of G.shells) {
+        if (s.taken) continue;
+        if (s.x < x0 - 20 || s.x > x1 + 20 || s.y < y0 - 20 || s.y > y1 + 20) continue;
+        ctx.fillStyle = '#ffd23f';
+        ctx.beginPath(); ctx.arc(s.x, s.y, 7, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#fff8c0';
+        ctx.beginPath(); ctx.arc(s.x - 2, s.y - 2, 3, 0, Math.PI * 2); ctx.fill();
+      }
+    }
+    // Marker toko / safehouse / garage (lingkaran + huruf).
+    for (const s of SHOP_DEFS) {
+      if (s.x < x0 - 60 || s.x > x1 + 60 || s.y < y0 - 60 || s.y > y1 + 60) continue;
+      const pulse = 26 + Math.sin(G.time * 3) * 4;
+      ctx.fillStyle = 'rgba(10,14,20,0.75)';
+      ctx.beginPath(); ctx.arc(s.x, s.y, pulse, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = '#7dff8a';
+      ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(s.x, s.y, pulse, 0, Math.PI * 2); ctx.stroke();
+      ctx.fillStyle = '#7dff8a';
+      ctx.font = font(20);
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(s.icon, s.x, s.y + 1);
+      ctx.fillStyle = '#fff';
+      ctx.font = font(12);
+      ctx.fillText(s.name, s.x, s.y + pulse + 14);
+    }
+    // Marker rute misi (titik bernomor) + target ekor (M8).
     const m = G.mission;
+    if (m.started && m.index >= 0) {
+      const step = G.missionDefs[m.index].steps[m.step];
+      if (step && step.type === 'route') {
+        step.points.forEach((pt, i) => {
+          const done = i < m.routeIndex;
+          ctx.strokeStyle = done ? '#7dff8a' : '#ffd23f';
+          ctx.lineWidth = 3;
+          ctx.beginPath(); ctx.arc(pt.x, pt.y, 34, 0, Math.PI * 2); ctx.stroke();
+          ctx.fillStyle = done ? '#7dff8a' : '#ffd23f';
+          ctx.font = font(18);
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(String(i + 1), pt.x, pt.y);
+        });
+      }
+      if (step && step.type === 'tail' && m.tail) {
+        const tv = m.tail.vehicle;
+        ctx.strokeStyle = '#ff4f4f';
+        ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.arc(tv.x, tv.y, 44, 0, Math.PI * 2); ctx.stroke();
+        ctx.fillStyle = '#ff4f4f';
+        ctx.font = font(12);
+        ctx.textAlign = 'center';
+        ctx.fillText('TARGET', tv.x, tv.y - 52);
+      }
+    }
     if (m.started && m.index >= 0) {
       const step = G.missionDefs[m.index].steps[m.step];
       if (step && step.x !== undefined) {
@@ -241,6 +297,60 @@ export function createRenderer(canvas) {
       drawPerson(e.x, e.y, e.angle, e.color, 10, true);
       ctx.fillStyle = '#111'; ctx.fillRect(e.x - 16, e.y - 24, 32, 5);
       ctx.fillStyle = '#e5534b'; ctx.fillRect(e.x - 16, e.y - 24, 32 * Math.max(0, e.health / 60), 5);
+    }
+    // Helikopter polisi: bayangan di tanah + badan + rotor + sorot lampu.
+    if (G.heli) {
+      const h = G.heli;
+      // Bayangan (di tanah, sedikit bergeser dari posisi heli).
+      ctx.fillStyle = 'rgba(0,0,0,0.35)';
+      ctx.beginPath(); ctx.ellipse(h.x + 26, h.y + 34, 34, 20, h.angle, 0, Math.PI * 2); ctx.fill();
+      // Sorot lampu: kerucut kuning tembus pandang dari heli ke pemain.
+      const px = G.player.x; const py = G.player.y;
+      const grad = ctx.createLinearGradient(h.x, h.y, px, py);
+      grad.addColorStop(0, 'rgba(255,240,150,0.28)');
+      grad.addColorStop(1, 'rgba(255,240,150,0.10)');
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      const perp = h.spotAngle + Math.PI / 2;
+      ctx.moveTo(h.x + Math.cos(perp) * 8, h.y + Math.sin(perp) * 8);
+      ctx.lineTo(h.x - Math.cos(perp) * 8, h.y - Math.sin(perp) * 8);
+      ctx.lineTo(px - Math.cos(perp) * 46, py - Math.sin(perp) * 46);
+      ctx.lineTo(px + Math.cos(perp) * 46, py + Math.sin(perp) * 46);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = 'rgba(255,240,150,0.30)';
+      ctx.beginPath(); ctx.arc(px, py, 52, 0, Math.PI * 2); ctx.fill();
+      // Badan heli.
+      ctx.save();
+      ctx.translate(h.x, h.y);
+      ctx.rotate(h.angle);
+      ctx.fillStyle = '#1c2f6e';
+      ctx.beginPath(); ctx.ellipse(0, 0, 30, 16, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#3f7fff';
+      ctx.beginPath(); ctx.arc(16, 0, 8, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#1c2f6e';
+      ctx.fillRect(-52, -3, 26, 6);
+      ctx.fillStyle = '#e5534b';
+      ctx.fillRect(-6, -20, 5, 5);
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(2, -20, 5, 5);
+      // Rotor berputar.
+      ctx.strokeStyle = 'rgba(20,20,20,0.85)';
+      ctx.lineWidth = 3;
+      const ra = h.rotor;
+      ctx.beginPath();
+      ctx.moveTo(Math.cos(ra) * -44, Math.sin(ra) * -44);
+      ctx.lineTo(Math.cos(ra) * 44, Math.sin(ra) * 44);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(Math.cos(ra + Math.PI / 2) * -44, Math.sin(ra + Math.PI / 2) * -44);
+      ctx.lineTo(Math.cos(ra + Math.PI / 2) * 44, Math.sin(ra + Math.PI / 2) * 44);
+      ctx.stroke();
+      ctx.restore();
+      ctx.font = font(12);
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#fff';
+      ctx.fillText('POLISI UDARA', h.x, h.y - 52);
     }
     // Peluru.
     ctx.fillStyle = '#ffd23f';
@@ -296,6 +406,21 @@ export function createRenderer(canvas) {
     ctx.setTransform(zoom, 0, 0, zoom, G.viewW / 2 - cam.x * zoom + shakeX, G.viewH / 2 - cam.y * zoom + shakeY);
     drawWorld(G);
     ctx.setTransform(1, 0, 0, 1, 0, 0);
+    // Garis kecepatan saat NOS aktif: streak putih dari tepi layar.
+    if (G.nosBoost) {
+      ctx.strokeStyle = 'rgba(255,255,255,0.55)';
+      ctx.lineWidth = 2;
+      const cx = G.viewW / 2; const cy = G.viewH / 2;
+      for (let i = 0; i < 14; i += 1) {
+        const a = (i / 14) * Math.PI * 2 + G.time * 0.7;
+        const r1 = Math.min(G.viewW, G.viewH) * 0.42;
+        const r2 = r1 + 60 + (i % 3) * 26;
+        ctx.beginPath();
+        ctx.moveTo(cx + Math.cos(a) * r1, cy + Math.sin(a) * r1);
+        ctx.lineTo(cx + Math.cos(a) * r2, cy + Math.sin(a) * r2);
+        ctx.stroke();
+      }
+    }
   }
 
   return { draw, resize };

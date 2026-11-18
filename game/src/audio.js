@@ -1,16 +1,15 @@
 // Semua suara disintesis WebAudio — tanpa file audio sama sekali.
 // AudioContext dibuat malas (setelah interaksi pertama) supaya tidak diblokir browser.
+// Radio mobil: 3 stasiun (lihat radio.js), masing-masing pola nada +
+// gelombang sendiri. Diputar lewat WebAudio synth (tanpa file audio).
+import { RADIO_STATIONS, stationAt, nextStationIndex } from './radio.js';
+
 export function createAudio() {
   // Volume + nada dasar. Mengubah angka di sini mengubah semua suara
   // yang memakainya, jadi penyeimbang suara cukup sentuh blok ini.
   const MASTER_VOLUME = 0.5;
   const BLIP_VOLUME = 0.15;
   const NOISE_VOLUME = 0.3;
-  const MUSIC_STEP_MS = 240;
-  const MUSIC_NOTE_DUR = 0.22;
-  const MUSIC_NOTE_VOLUME = 0.1;
-  // Bassline looping (0 = jeda): A1, A1, B1, E2, D2 — tempo 240 ms/nada.
-  const MUSIC_NOTES = [55, 0, 55, 65.4, 0, 55, 82.4, 0, 73.4, 65.4, 55, 0];
   const MUSIC_HAT_EVERY = 4; // hi-hat tiap 4 nada
   const ENGINE_BASE_FREQ = 60;
   const ENGINE_FREQ_SPAN = 140;
@@ -21,16 +20,23 @@ export function createAudio() {
   const SIREN_FREQ_HIGH = 880;
   const SIREN_SWAP_MS = 450;
   const SIREN_GAIN = 0.04;
+  const ROTOR_FREQ = 46;
+  const ROTOR_GAIN = 0.05;
+  const ROTOR_CHOP_MS = 90;
 
   let ctx = null;
   let master = null;
   let muted = false;
   let musicTimer = null;
   let noteIndex = 0;
+  let stationIndex = 0;
   let engineOsc = null;
   let engineGain = null;
   let sirenOsc = null;
   let sirenGain = null;
+  let rotorOsc = null;
+  let rotorGain = null;
+  let rotorChop = null;
 
   function ensure() {
     if (ctx) return true;
@@ -112,13 +118,49 @@ export function createAudio() {
       if (!ensure() || musicTimer) return;
       musicTimer = setInterval(() => {
         if (muted) return;
-        const f = MUSIC_NOTES[noteIndex % MUSIC_NOTES.length];
+        const st = stationAt(stationIndex);
+        const f = st.notes[noteIndex % st.notes.length];
         noteIndex += 1;
-        if (f) tone(f, MUSIC_NOTE_DUR, 'triangle', MUSIC_NOTE_VOLUME);
+        if (f) tone(f, st.stepMs / 1000 * 0.9, st.wave, st.vol);
         if (noteIndex % MUSIC_HAT_EVERY === 0) burst(0.03, 0.05, 6000);
-      }, MUSIC_STEP_MS);
+      }, stationAt(stationIndex).stepMs);
     },
     stopMusic() { if (musicTimer) { clearInterval(musicTimer); musicTimer = null; } },
+    // Radio: nama stasiun aktif + ganti stasiun (R saat nyetir).
+    stationName() { return stationAt(stationIndex).name; },
+    stationIndex() { return stationIndex; },
+    trackTitle() { return stationAt(stationIndex).track.title; },
+    trackArtist() { return stationAt(stationIndex).track.artist; },
+    cycleStation() {
+      stationIndex = nextStationIndex(stationIndex);
+      noteIndex = 0;
+      if (musicTimer) {
+        clearInterval(musicTimer);
+        musicTimer = null;
+        this.startMusic();
+      }
+      return stationAt(stationIndex).name;
+    },
+    // Rotor helikopter: dengung rendah yang dicacah (chop) berkala.
+    rotor(on) {
+      if (!ensure()) return;
+      try {
+        if (on && !muted) {
+          if (!rotorOsc) {
+            ({ osc: rotorOsc, gain: rotorGain } = startLoop('sawtooth', ROTOR_GAIN));
+            rotorOsc.frequency.value = ROTOR_FREQ;
+            let loud = true;
+            rotorChop = setInterval(() => {
+              if (rotorGain) { loud = !loud; rotorGain.gain.value = loud ? ROTOR_GAIN : ROTOR_GAIN * 0.35; }
+            }, ROTOR_CHOP_MS);
+          }
+        } else if (rotorOsc) {
+          if (rotorChop) { clearInterval(rotorChop); rotorChop = null; }
+          stopLoop({ osc: rotorOsc, gain: rotorGain });
+          rotorOsc = null; rotorGain = null;
+        }
+      } catch { /* abaikan */ }
+    },
     engine(on, speedRatio) {
       if (!ensure()) return;
       try {

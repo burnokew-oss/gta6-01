@@ -14,12 +14,14 @@ import { spawnPeds, updatePeds } from './pedestrians.js';
 import { updatePolice } from './police.js';
 import { fireWeapon, reloadWeapon, updateCombat } from './combat.js';
 import { createMissionState, startMission, updateMissions, onMissionEvent, startTaxi, startRampage } from './missions.js';
+import { updateShops, buyShopItem } from './shops.js';
 import { createRenderer } from './render.js';
-import { createHud, SCREEN_TITLE, SCREEN_PLAY, SCREEN_PAUSED, SCREEN_OVER } from './hud.js';
+import { createHud, SCREEN_TITLE, SCREEN_PLAY, SCREEN_PAUSED, SCREEN_OVER, SCREEN_MAP } from './hud.js';
 import { createAudio } from './audio.js';
 import { readSave, writeSave } from './save.js';
 import { stageShot } from './shots.js';
-import { MISSION_DEFS } from './config.js';
+import { MISSION_DEFS, SHELL_COUNT } from './config.js';
+import { districtAt, roadLines } from './city.js';
 
 const MAX_FRAME = 0.25;
 
@@ -41,6 +43,11 @@ const G = {
   player: null, vehicles: [], peds: [], cops: [], enemies: [],
   bullets: [], particles: [], skid: [], cashFloaters: [],
   wanted: 0, wantedTimer: 0, hiddenTimer: 0, roadblock: null,
+  heli: null, shop: null, nosBoost: false, radioToast: null, saveNow: false,
+  coverStrip: null,
+  rep: 0, copNameSeq: 0, playSeconds: 0,
+  stats: { missionsDone: 0, takedowns: 0, carsStolen: 0, escapes: 0, shells: 0 },
+  shells: [],
   mission: createMissionState(), missionDefs: MISSION_DEFS,
   camera: { x: 900, y: 2650, zoom: 1 },
   viewW: window.innerWidth, viewH: window.innerHeight,
@@ -67,11 +74,37 @@ function resetWorld() {
   G.wanted = 0;
   G.hiddenTimer = 0;
   G.roadblock = null;
+  G.heli = null;
+  G.shop = null;
+  G.nosBoost = false;
+  G.radioToast = null;
+  G.saveNow = false;
+  G.coverStrip = null;
   G.mission = createMissionState();
   G.shake = 0;
   G.flashRed = 0;
   G.shotsFiredTimer = 0;
   G.events = [];
+  G.rep = 0;
+  G.copNameSeq = 0;
+  G.playSeconds = 0;
+  G.stats = { missionsDone: 0, takedowns: 0, carsStolen: 0, escapes: 0, shells: 0 };
+  G.shells = [];
+  // Kerang Teluk: 24 titik di pinggir jalan, posisi dari seed yang sama.
+  {
+    const lines = roadLines();
+    for (let i = 0; i < SHELL_COUNT; i += 1) {
+      const vertical = G.rng.chance(0.5);
+      const line = G.rng.pick(lines);
+      const along = G.rng.range(200, 3000);
+      const side = G.rng.chance(0.5) ? 1 : -1;
+      G.shells.push({
+        x: vertical ? line + side * 85 : along,
+        y: vertical ? along : line + side * 85,
+        taken: false,
+      });
+    }
+  }
   G.camera = { x: G.player.x, y: G.player.y, zoom: 1 };
   spawnLoanerCar(G);
   spawnTraffic(G, 12);
@@ -88,6 +121,8 @@ function snapshot() {
     ammo: p.ammo, ammoInMag: p.ammoInMag,
     missionIndex: G.mission.index, missionStarted: G.mission.started,
     wanted: G.wanted, clock: G.clock, day: G.day,
+    rep: G.rep, shells: G.stats.shells, upgrades: p.upgrades,
+    playSeconds: G.playSeconds, stats: G.stats,
   };
 }
 
@@ -101,6 +136,14 @@ function applySnapshot(s) {
   G.wanted = s.wanted || 0;
   G.clock = s.clock || 8 * 60;
   G.day = s.day || 1;
+  G.rep = s.rep || 0;
+  G.playSeconds = s.playSeconds || 0;
+  if (s.stats) G.stats = { ...G.stats, ...s.stats };
+  if (s.upgrades) {
+    p.upgrades = s.upgrades;
+    p.engineLevel = s.upgrades.engine ? 1 : 0;
+    p.nosMax = s.upgrades.nitro ? 200 : 100;
+  }
   if (s.missionIndex >= 0 && s.missionIndex < MISSION_DEFS.length) {
     startMission(G, s.missionIndex);
     if (!s.missionStarted) { G.mission.started = false; }
@@ -137,11 +180,33 @@ function stepGame(dt) {
     if (actions & (ACTION_PAUSE | ACTION_CONFIRM)) G.screen = SCREEN_PLAY;
     return;
   }
+  if (G.screen === SCREEN_MAP) {
+    // Peta: dunia beku; M / Esc / Enter kembali main.
+    if (actions & (ACTION_PAUSE | ACTION_CONFIRM)) G.screen = SCREEN_PLAY;
+    if (input.keys.map && !G._mapLatch) { G._mapLatch = true; G.screen = SCREEN_PLAY; }
+    if (!input.keys.map) G._mapLatch = false;
+    return;
+  }
 
   // --- layar play ---
+  G.playSeconds += dt;
   if (actions & ACTION_PAUSE) { G.screen = SCREEN_PAUSED; announce('Paused.'); return; }
   if (actions & ACTION_MUTE) audio.setMuted(!audio.isMuted());
-  if (actions & ACTION_RELOAD) reloadWeapon(G);
+  // M: buka peta kota (sekali tekan).
+  if (input.keys.map && !G._mapLatch) { G._mapLatch = true; G.screen = SCREEN_MAP; announce('Peta Teluk Cerah.'); return; }
+  if (!input.keys.map) G._mapLatch = false;
+  // R: reload saat jalan kaki, ganti stasiun radio saat nyetir.
+  if (actions & ACTION_RELOAD) {
+    if (G.player.onFoot) reloadWeapon(G);
+    else {
+      const name = audio.cycleStation();
+      G.radioToast = { text: name, timer: 2.5 };
+    }
+  }
+  if (G.radioToast) {
+    G.radioToast.timer -= dt;
+    if (G.radioToast.timer <= 0) G.radioToast = null;
+  }
 
   // Taksi (T) / Rampage (G) — sekali tekan.
   if (input.keys.taxi && !G._taxiLatch) { G._taxiLatch = true; startTaxi(G); }
@@ -170,7 +235,14 @@ function stepGame(dt) {
   updatePolice(G, dt);
   updateCombat(G, dt);
   updateMissions(G, dt);
+  updateShops(G);
   drainEvents();
+  // Safehouse: beli "sembuh + save" menulis slot 1.
+  if (G.saveNow) {
+    G.saveNow = false;
+    writeSave(0, snapshot());
+    announce('Disimpan di safehouse (slot 1).');
+  }
 
   // Taxi: jemput lalu antar.
   if (m.taxi) {
@@ -208,6 +280,7 @@ function stepGame(dt) {
   }
 }
 G.stepGame = stepGame;
+G.startMission = (i) => startMission(G, i); // hook playtest: mulai misi ke-i tanpa main manual
 
 function announce(message) {
   status.textContent = message;
@@ -220,18 +293,15 @@ function drawFrame() {
   renderer.draw(G, G.screen);
   if (G.screen === SCREEN_TITLE) {
     const saves = readSave(0);
-    hud.drawPanel('TELUK CERAH', [
-      'Open-world crime 2D — kota pantai, 6 misi, wanted 0-5, taksi & rampage.',
-      'WASD gerak · E masuk mobil · F curi mobil · Klik kiri tembak · R reload',
-      'Shift lari · Space handbrake · T taksi · G rampage · Esc pause · M mute',
-      saves ? `Save ditemukan (Hari ${saves.day}, $${saves.cash}) — tekan L untuk lanjut` : 'Belum ada save.',
-      '',
-      'Semua nama, kota, dan cerita orisinal. Bukan GTA.',
-    ], 'Tekan Enter / klik untuk mulai');
+    hud.drawTitle(G, saves);
+  } else if (G.screen === SCREEN_MAP) {
+    hud.drawMap(G);
   } else if (G.screen === SCREEN_PAUSED) {
     hud.drawPanel('Paused', [
       'S — simpan ke slot 1',
+      'M — peta kota',
       'Q — kembali ke title',
+      'N — mute',
       'Esc — lanjut main',
     ], 'Esc untuk lanjut');
   } else {
@@ -272,9 +342,20 @@ function runGame() {
       G.screen = SCREEN_TITLE;
       resetWorld();
     }
-    if (G.screen === SCREEN_PLAY && e.code === 'Digit1') G.player.weapon = 'fist';
-    if (G.screen === SCREEN_PLAY && e.code === 'Digit2' && G.player.ammo.pistol > 0) G.player.weapon = 'pistol';
-    if (G.screen === SCREEN_PLAY && e.code === 'Digit3' && G.player.ammo.shotgun > 0) G.player.weapon = 'shotgun';
+    if (G.screen === SCREEN_PLAY && e.code === 'Digit1') {
+      if (G.shop) buyShopItem(G, 0);
+      else G.player.weapon = 'fist';
+    }
+    if (G.screen === SCREEN_PLAY && e.code === 'Digit2') {
+      if (G.shop) buyShopItem(G, 1);
+      else if (G.player.ammo.pistol > 0) G.player.weapon = 'pistol';
+    }
+    if (G.screen === SCREEN_PLAY && e.code === 'Digit3') {
+      if (G.shop) buyShopItem(G, 2);
+      else if (G.player.ammo.shotgun > 0) G.player.weapon = 'shotgun';
+    }
+    if (G.screen === SCREEN_PLAY && e.code === 'Digit4' && G.shop) buyShopItem(G, 3);
+    if (G.screen === SCREEN_PLAY && e.code === 'Digit5' && G.shop) buyShopItem(G, 4);
   });
 
   function frame(now) {
