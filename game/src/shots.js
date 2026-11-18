@@ -44,6 +44,7 @@ function placeCopCar(G, dx, dz, angle, name, status) {
 }
 
 export function stageShot(name, G) {
+  document.body.classList.add('shot-mode');
   G.resetWorld();
   G.clock = 10 * 60;
   G.day = 1;
@@ -98,10 +99,11 @@ export function stageShot(name, G) {
     G.cops.splice(4);
     car.speed = 21.5; // 172 km/j di speedometer
     if (G.heli) {
-      // Heli rendah + dekat di depan-atas: bodi + sorot masuk frame.
-      G.heli.x = G.player.x - 9.5;
+      // Heli di depan-atas dalam frame: bodi + kerucut sorot tajam
+      // terlihat tanpa menutupi mobil hero.
+      G.heli.x = G.player.x - 16;
       G.heli.z = G.player.z + 1;
-      G.heli.y = 9;
+      G.heli.y = 10;
     }
     for (const v of G.vehicles) {
       if (v.type === 'police') v.dead = true;
@@ -116,12 +118,12 @@ export function stageShot(name, G) {
     placeCopCar(G, -9, -4.4, -Math.PI / 2, 'ELANG-11', 'PURSUIT');
     const dlg = document.getElementById('dialog');
     if (dlg) dlg.style.bottom = '10px';
-    // Kamera chase ronde 2: 5,4 unit di belakang, 2,0 di atas aspal,
-    // memandang sedikit ke bawah ke titik di depan mobil — hero besar
-    // di tengah-bawah, jalan lurus ke titik hilang, neon di kedua sisi.
+    // Kamera chase ronde 3: lebih rendah + rapat — hampir setinggi
+    // atap, hero ~35-40% lebar frame di tengah, jalan lurus ke titik
+    // hilang, neon di kedua sisi.
     G.shotCam = {
-      px: car.x + 6.2, py: 2.15, pz: car.z + 1.0,
-      lx: car.x - 10, ly: 0.85, lz: car.z - 0.6,
+      px: car.x + 6.4, py: 2.25, pz: car.z + 0.9,
+      lx: car.x - 11, ly: 0.9, lz: car.z - 0.6,
     };
     return { screen: SCREEN_PLAY };
   }
@@ -168,10 +170,12 @@ export function stageShot(name, G) {
     const fz = Math.cos(a);
     const rx = -Math.cos(a);
     const rz = Math.sin(a);
+    // Kamera on-foot ronde 3: lebih dekat + rendah — pemain besar
+    // kiri-tengah (~35% tinggi frame), musuh di kanan.
     G.shotCam = {
-      px: G.player.x - fx * 6.5 + rx * 2.5,
-      py: 2.8,
-      pz: G.player.z - fz * 6.5 + rz * 2.5,
+      px: G.player.x - fx * 4.4 + rx * 2.0,
+      py: 2.1,
+      pz: G.player.z - fz * 4.4 + rz * 2.0,
       lx: G.player.x + fx * 8 + rx * 2.4,
       ly: 0.6,
       lz: G.player.z + fz * 8 + rz * 2.4,
@@ -213,12 +217,12 @@ export function stageShot(name, G) {
   G.clock = 21 * 60;
   G.rain = true;
   G.titleFixed = true;
-  const hero = makeVehicle(G.rng, 'sport', 3, 20, -Math.PI / 2);
+  const hero = makeVehicle(G.rng, 'sport', 8, 24, -Math.PI / 2);
   hero.color = 0xd42a2a;
   G.vehicles.push(hero);
-  G.player.x = 2;
-  G.player.z = 22;
-  G.player.angle = 0.79;
+  G.player.x = 7.5;
+  G.player.z = 25.5;
+  G.player.angle = 0.2;
   G.player.onFoot = true;
   writeSave(0, {
     cash: 14830, health: 82, armor: 64, x: 0, z: 0,

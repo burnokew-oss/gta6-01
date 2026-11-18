@@ -122,12 +122,12 @@ export function createRenderer(canvas) {
         sctx.fill();
       }
       // Jendela menyala acak di siluet.
-      for (let wy = 256 - bh + 8; wy < 248; wy += 11) {
-        for (let wx = bx + 5; wx < bx + bw - 4; wx += 9) {
-          if (srnd() < 0.42) {
+      for (let wy = 256 - bh + 8; wy < 248; wy += 13) {
+        for (let wx = bx + 5; wx < bx + bw - 4; wx += 11) {
+          if (srnd() < 0.5) {
             const warm = srnd() < 0.62;
-            sctx.fillStyle = warm ? 'rgba(255,196,90,0.95)' : (srnd() < 0.5 ? 'rgba(110,225,255,0.9)' : 'rgba(255,120,190,0.85)');
-            sctx.fillRect(wx, wy, 3.5, 5);
+            sctx.fillStyle = warm ? 'rgba(255,196,90,1)' : (srnd() < 0.5 ? 'rgba(110,225,255,1)' : 'rgba(255,120,190,0.95)');
+            sctx.fillRect(wx, wy, 5, 8);
           }
         }
       }
@@ -136,11 +136,63 @@ export function createRenderer(canvas) {
     const skyTex = new THREE.CanvasTexture(sc);
     skyTex.anisotropy = 4;
     const skyline = new THREE.Mesh(
-      new THREE.CylinderGeometry(470, 470, 150, 48, 1, true),
+      new THREE.CylinderGeometry(250, 250, 190, 48, 1, true),
       new THREE.MeshBasicMaterial({ map: skyTex, side: THREE.BackSide, fog: false }),
     );
-    skyline.position.y = 62;
+    skyline.position.y = 80;
     scene.add(skyline);
+    // Menara jauh di ujung jalan chase (arah -x, titik hilang kamera):
+    // siluet tinggi berjendela menyala supaya horizon tidak kosong.
+    const towerCols = [0x1a2438, 0x232033, 0x14202e, 0x2a2030];
+    const towerWins = [];
+    for (let ti = 0; ti < 12; ti += 1) {
+      const tx = -95 - ti * 7 - srnd() * 6;
+      const tz = -28 + srnd() * 70;
+      const tw = 9 + srnd() * 7;
+      const td = 9 + srnd() * 7;
+      const th = 34 + srnd() * 42;
+      const tower = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshLambertMaterial({ color: towerCols[ti % towerCols.length] }));
+      tower.position.set(tx, th / 2, tz);
+      tower.scale.set(tw, th, td);
+      scene.add(tower);
+      const tcols = Math.max(2, Math.floor(tw / 2.4));
+      const trows = Math.max(3, Math.floor(th / 3.4));
+      for (let s = 0; s < 2; s += 1) {
+        for (let cx = 0; cx < tcols; cx += 1) {
+          for (let ry = 0; ry < trows; ry += 1) {
+            if (srnd() < 0.45) continue;
+            const warm = srnd() < 0.65;
+            const fx = (cx + 0.5) / tcols - 0.5;
+            const fy = 2.5 + ry * 3.4;
+            if (fy > th - 1.5) continue;
+            if (s === 0) towerWins.push({ x: tx + fx * tw, y: fy, z: tz + td / 2 + 0.08, ry: 0, c: warm ? [0.95, 0.7, 0.3] : [0.5, 0.8, 1] });
+            else towerWins.push({ x: tx + fx * tw, y: fy, z: tz - td / 2 - 0.08, ry: Math.PI, c: warm ? [0.95, 0.7, 0.3] : [0.5, 0.8, 1] });
+          }
+        }
+      }
+      if (srnd() < 0.5) {
+        const ant = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.2, 8, 6), new THREE.MeshBasicMaterial({ color: 0x222226 }));
+        ant.position.set(tx, th + 4, tz);
+        scene.add(ant);
+        const beacon = new THREE.Mesh(new THREE.SphereGeometry(0.5, 8, 6), new THREE.MeshBasicMaterial({ color: 0xff2d2d }));
+        beacon.position.set(tx, th + 8, tz);
+        scene.add(beacon);
+      }
+    }
+    const twMesh = new THREE.InstancedMesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide }), towerWins.length);
+    {
+      const col = new THREE.Color();
+      const dum = new THREE.Object3D();
+      towerWins.forEach((w, i) => {
+        dum.position.set(w.x, w.y, w.z);
+        dum.rotation.set(0, w.ry, 0);
+        dum.scale.set(1.3, 1.6, 1);
+        dum.updateMatrix();
+        twMesh.setMatrixAt(i, dum.matrix);
+        twMesh.setColorAt(i, col.setRGB(w.c[0], w.c[1], w.c[2]));
+      });
+    }
+    scene.add(twMesh);
   }
 
   // ---------- material + geometri bersama ----------
@@ -262,7 +314,7 @@ export function createRenderer(canvas) {
     }
     const roadMesh = new THREE.InstancedMesh(
       boxGeo,
-      new THREE.MeshPhongMaterial({ color: 0x0b0b11, shininess: 200, specular: 0x707688 }),
+      new THREE.MeshPhongMaterial({ color: 0x06060b, shininess: 320, specular: 0xb8c0d8 }),
       roadSpots.length,
     );
     roadSpots.forEach((r, i) => {
@@ -303,17 +355,34 @@ export function createRenderer(canvas) {
       dashMesh.setMatrixAt(i, dummy.matrix);
     });
     scene.add(dashMesh);
-    // Cermin neon generik di koridor chase (z=12) + pelabuhan (z=100):
-    // coretan pink/cyan/oranye memanjang searah jalan, rapat, supaya
-    // aspal terbaca basah bahkan sebelum satu sign pun terlihat.
+    // Cermin neon di koridor chase (z=12) + pelabuhan (z=100):
+    // coretan pink/cyan/oranye PANJANG + LEBAR + TERANG, rapat,
+    // supaya aspal terbaca basah seperti cermin di referensi.
     const streakCols = [0xff2d78, 0x00e5ff, 0xff6a00, 0xffe14d, 0x39ff6a, 0xc26aff];
-    for (let x = -52; x <= 92; x += 7) {
-      const c = streakCols[Math.abs(x / 7) % streakCols.length];
-      wetStreak(scene, x + ((x % 14 === 0) ? 0 : 2), 12 + (x % 3) - 1, 13 + (x % 5), 1.5 + (x % 3) * 0.5, c, 0.62, true);
+    for (let x = -60; x <= 110; x += 6) {
+      const c = streakCols[Math.abs(Math.round(x / 6)) % streakCols.length];
+      wetStreak(scene, x, 12 + ((x % 8) - 4) * 0.55, 16 + (Math.abs(x) % 7), 1.2 + (Math.abs(x) % 3) * 0.4, c, 0.6, true);
+      wetStreak(scene, x + 3, 12 - ((x % 8) - 4) * 0.55, 11 + (Math.abs(x) % 5), 0.9, streakCols[(Math.abs(Math.round(x / 6)) + 2) % streakCols.length], 0.4, true);
     }
     for (let x = 30; x <= 108; x += 9) {
       const c = streakCols[(x / 9) % streakCols.length];
       wetStreak(scene, x, 100 + (x % 2), 12, 1.1, c, 0.3, true);
+    }
+    // Jejak cahaya tipis di tengah jalan chase: pantulan lampu mobil
+    // + lampu jalan di aspal basah (samar, bukan pita putih lebar).
+    for (let x = -40; x <= 100; x += 14) {
+      wetStreak(scene, x, 12, 22, 0.5, 0xffe9b0, 0.22, true);
+    }
+    // Genangan berwarna: elips glow pink/cyan di aspal koridor chase.
+    const puddleGlowCols = [0xff2d78, 0x00e5ff, 0xff6a00, 0xffe14d];
+    for (let i = 0; i < 10; i += 1) {
+      const pg = new THREE.Mesh(
+        new THREE.CircleGeometry(1.8 + (i % 3) * 0.5, 18),
+        new THREE.MeshBasicMaterial({ map: getGlowTex(), color: puddleGlowCols[i % puddleGlowCols.length], transparent: true, opacity: 0.2, blending: THREE.AdditiveBlending, depthWrite: false }),
+      );
+      pg.rotation.x = -Math.PI / 2;
+      pg.position.set(-40 + i * 13, 0.085, 12 + (i % 2 === 0 ? 2.5 : -2.5));
+      scene.add(pg);
     }
     // Genangan: elips mengkilap tersebar di jalan (Phong specular tinggi).
     const puddleGeo = new THREE.CircleGeometry(1, 20);
@@ -384,8 +453,8 @@ export function createRenderer(canvas) {
       for (let s = 0; s < 4; s += 1) {
         for (let cx = 0; cx < cols; cx += 1) {
           for (let ry = 0; ry < rows; ry += 1) {
-            if ((cx * 2 + ry + s) % 3 === 0) continue;
-            const warm = ((cx * 7 + ry * 3 + s) % 4) !== 0;
+            if ((cx + ry * 2 + s) % 2 === 0) continue;
+            const warm = ((cx * 7 + ry * 3 + s) % 3) !== 0;
             const c = warm ? [0.92, 0.62, 0.26] : [0.55, 0.78, 0.95];
             const fx = (cx + 0.5) / cols - 0.5;
             const fy = 2.0 + ry * 2.9;
@@ -403,7 +472,7 @@ export function createRenderer(canvas) {
     wins.forEach((w, i) => {
       dummy.position.set(w.x, w.y, w.z);
       dummy.rotation.set(0, w.ry, 0);
-      dummy.scale.set(1.1, 1.1, 1);
+      dummy.scale.set(0.85, 0.9, 1);
       dummy.updateMatrix();
       winMesh.setMatrixAt(i, dummy.matrix);
       winMesh.setColorAt(i, col.setRGB(w.c[0], w.c[1], w.c[2]));
@@ -441,9 +510,76 @@ export function createRenderer(canvas) {
       glowMesh.setMatrixAt(i, dummy.matrix);
     });
     scene.add(glowMesh);
-    // Neon sign: nama-nama orisinal Teluk Cerah saja. Satu sign per
-    // gedung dekat jalan (bukan tiap ketiga), plus sign vertikal di
-    // gedung tinggi — jalanan padat cahaya seperti referensi.
+    // Tenda toko bergaris + kusen etalase + pintu: lantai dasar hidup.
+    const awnCanvas = document.createElement('canvas');
+    awnCanvas.width = 128;
+    awnCanvas.height = 32;
+    {
+      const actx = awnCanvas.getContext('2d');
+      for (let i = 0; i < 8; i += 1) {
+        actx.fillStyle = i % 2 === 0 ? '#e8455a' : '#f2ead8';
+        actx.fillRect(i * 16, 0, 16, 32);
+      }
+    }
+    const awnTex = new THREE.CanvasTexture(awnCanvas);
+    const awnMat = new THREE.MeshLambertMaterial({ map: awnTex });
+    const awnGeo = new THREE.PlaneGeometry(1, 1);
+    const mullMat = lambert(0x14161c);
+    const doorMat = lambert(0x0c0e14);
+    const trimMat = lambert(0x1c1e26);
+    for (const b of city.buildings) {
+      const f = nearestFace(b);
+      if (f.gap > 13 || b.h < 6) continue;
+      const awnW = Math.min(b.w * 0.85, 10);
+      const awn = new THREE.Mesh(awnGeo, awnMat);
+      awn.scale.set(awnW, 1.5, 1);
+      awn.position.set(f.px, 3.1, f.pz + f.nz * 0.7);
+      awn.rotation.y = f.ry;
+      awn.rotation.x = -0.5;
+      scene.add(awn);
+      // Kusen vertikal etalase (3 tiang) + pintu tengah.
+      for (let k = -1; k <= 1; k += 1) {
+        const mull = new THREE.Mesh(new THREE.BoxGeometry(0.12, 2.4, 0.12), mullMat);
+        const ox2 = f.nz !== 0 ? k * awnW * 0.28 : 0;
+        const oz2 = f.nz !== 0 ? 0 : k * awnW * 0.28;
+        mull.position.set(f.px + ox2 + f.nx * 0.12, 1.5, f.pz + oz2 + f.nz * 0.12);
+        scene.add(mull);
+      }
+      const door = new THREE.Mesh(new THREE.PlaneGeometry(1.3, 2.5), doorMat);
+      door.position.set(f.px, 1.25, f.pz + f.nz * 0.1);
+      door.position.x += f.nx * 0.1;
+      door.rotation.y = f.ry;
+      scene.add(door);
+      // Lis dasar gelap: alas bangunan tegas di trotoar.
+      const trim = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), trimMat);
+      trim.scale.set(b.w + 0.2, 0.5, b.d + 0.2);
+      trim.position.set(b.x, 0.25, b.z);
+      scene.add(trim);
+      // Balkon di lantai 2-3 gedung tinggi + kotak AC di atap.
+      if (b.tall) {
+        for (let fl = 0; fl < 2; fl += 1) {
+          const by = 6.5 + fl * 3.2;
+          if (by > b.h - 2) break;
+          const balc = new THREE.Mesh(new THREE.BoxGeometry(Math.min(4, b.w * 0.5), 0.25, 1.2), trimMat);
+          balc.position.set(f.px + (fl % 2 === 0 ? -b.w * 0.18 : b.w * 0.18), by, f.pz + f.nz * 0.7);
+          balc.position.x += f.nx * 0.7;
+          scene.add(balc);
+          const rail = new THREE.Mesh(new THREE.BoxGeometry(Math.min(4, b.w * 0.5), 0.8, 0.08), mullMat);
+          rail.position.set(balc.position.x, by + 0.5, balc.position.z + f.nz * 0.55);
+          rail.position.x += f.nx * 0.55;
+          rail.rotation.y = f.ry;
+          scene.add(rail);
+        }
+        const ac = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.9, 1.2), lambert(0x4a4f58));
+        ac.position.set(b.x + b.w / 4, b.h + 0.9, b.z - b.d / 4);
+        scene.add(ac);
+      }
+      // Pantulan sign di aspal: coretan memanjang searah jalan.
+      const alongX = f.nz !== 0;
+      const reach = f.gap * 0.5 + 1.5;
+      const fcol = [0xff2d78, 0x00e5ff, 0xffe14d, 0x39ff6a, 0xff6a00, 0xc26aff][Math.abs(Math.round(b.x + b.z)) % 6];
+      wetStreak(scene, f.px + f.nx * reach, f.pz + f.nz * reach, 14, 1.6, fcol, 0.55, alongX);
+    }
     const NEON_TEXTS = ['WARUNG KOPI', 'SINEMA', 'KARAOKE', 'BILLIARD', 'PIZZA', 'KAFE', 'HOTEL', 'BAR', 'TOKO 24 JAM', 'PASAR MALAM', 'RUMAH MAKAN', 'BAKSO', 'SATE', 'KOPI TELUK', 'DISKO', 'SALON', 'BENGKEL', 'FOTO STUDIO', 'LAUNDRY', 'WARUNG'];
     const NEON_COLORS = ['#ff2d78', '#00e5ff', '#ffe14d', '#39ff6a', '#ff6a00', '#c26aff', '#ff3b30'];
     const neonTexCache = new Map();
@@ -647,6 +783,26 @@ export function createRenderer(canvas) {
   // ---------- kendaraan: bodi kapsul membulat, cat glossy ----------
   const carGroups = new Map();
   let polisiTex = null;
+  function getPlateTex() {
+    if (plateTexCache) return plateTexCache;
+    const c = document.createElement('canvas');
+    c.width = 256;
+    c.height = 64;
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = '#f2f2e8';
+    ctx.fillRect(0, 0, 256, 64);
+    ctx.strokeStyle = '#1a2a6a';
+    ctx.lineWidth = 5;
+    ctx.strokeRect(3, 3, 250, 58);
+    ctx.font = '900 38px Arial, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#16224a';
+    ctx.fillText('TC · RAKA', 128, 34);
+    plateTexCache = new THREE.CanvasTexture(c);
+    return plateTexCache;
+  }
+  let plateTexCache = null;
   function getPolisiTex() {
     if (polisiTex) return polisiTex;
     const c = document.createElement('canvas');
@@ -692,34 +848,110 @@ export function createRenderer(canvas) {
     cabin.scale.set(v.wid * 0.30, 0.22, v.len * 0.15);
     cabin.position.set(0, 0.8, -0.3);
     g.add(cabin);
-    // Atap: punggung merah tipis di atas kabin — kubah kaca terbelah
-    // jadi atap + kaca, bukan satu kubah gelap.
-    const roof = capsuleMesh(0.1, v.len * 0.12, paint);
+    // Atap: punggung merah matte di atas kabin — tanpa kilau specular
+    // putih yang terbaca sebagai strip di foto.
+    const roof = capsuleMesh(0.1, v.len * 0.12, lambert(g.userData.baseColor));
     roof.rotation.x = Math.PI / 2;
     roof.scale.set(1.1, 1, 0.55);
     roof.position.set(0, 1.0, -0.3);
     g.add(roof);
-    // Ban: torus + pelek logam.
+    // Ban: torus + pelek logam 5-spoke + cakram rem.
     const tireGeo = new THREE.TorusGeometry(0.3, 0.11, 10, 18);
     const tireMat = lambert(0x0c0c0e);
     const rimGeo = new THREE.CylinderGeometry(0.2, 0.2, 0.14, 14);
     const rimMat = new THREE.MeshPhongMaterial({ color: 0xc8ccd4, shininess: 220, specular: 0xffffff });
+    const discGeo = new THREE.CylinderGeometry(0.23, 0.23, 0.05, 14);
+    const discMat = new THREE.MeshPhongMaterial({ color: 0x8a8f98, shininess: 180, specular: 0xdddddd });
+    const spokeGeo = new THREE.BoxGeometry(0.34, 0.07, 0.03);
     for (const [wx, wz] of [[-1, 1], [1, 1], [-1, -1], [1, -1]]) {
       const tire = new THREE.Mesh(tireGeo, tireMat);
       tire.rotation.y = Math.PI / 2;
       tire.position.set(wx * (v.wid / 2 - 0.15), 0.32, wz * (v.len / 2 - 0.85));
       g.add(tire);
+      const disc = new THREE.Mesh(discGeo, discMat);
+      disc.rotation.z = Math.PI / 2;
+      disc.position.copy(tire.position);
+      g.add(disc);
       const rim = new THREE.Mesh(rimGeo, rimMat);
       rim.rotation.z = Math.PI / 2;
       rim.position.copy(tire.position);
+      rim.position.x += wx * 0.06;
       g.add(rim);
+      for (let s = 0; s < 5; s += 1) {
+        const spoke = new THREE.Mesh(spokeGeo, rimMat);
+        spoke.position.set(wx * (v.wid / 2 - 0.06), 0.32, wz * (v.len / 2 - 0.85));
+        spoke.rotation.x = (s / 5) * Math.PI;
+        g.add(spoke);
+      }
+    }
+    // Panel bodi: garis kap + bagasi, grille, lampu depan terpisah,
+    // splitter, diffuser + knalpot, gagang pintu, ventilasi samping.
+    const seamMat = lambert(0x0a0a0e);
+    const hoodSeam = new THREE.Mesh(new THREE.BoxGeometry(v.wid * 0.7, 0.02, 0.05), seamMat);
+    hoodSeam.position.set(0, 0.86, v.len * 0.22);
+    g.add(hoodSeam);
+    const trunkSeam = new THREE.Mesh(new THREE.BoxGeometry(v.wid * 0.7, 0.02, 0.05), seamMat);
+    trunkSeam.position.set(0, 0.86, -v.len * 0.28);
+    g.add(trunkSeam);
+    const grille = new THREE.Mesh(new THREE.BoxGeometry(v.wid * 0.55, 0.16, 0.06), lambert(0x0d0d12));
+    grille.position.set(0, 0.55, v.len / 2 + 0.02);
+    g.add(grille);
+    for (const sx of [-1, 1]) {
+      const lamp = capsuleMesh(0.09, 0.42, basic(0xfff6d8));
+      lamp.rotation.z = Math.PI / 2;
+      lamp.position.set(sx * (v.wid * 0.32), 0.72, v.len / 2 + 0.03);
+      g.add(lamp);
+      const fog = new THREE.Mesh(sphereGeo, basic(0xffeebb));
+      fog.scale.set(0.28, 0.28, 0.28);
+      fog.position.set(sx * (v.wid * 0.32), 0.42, v.len / 2 + 0.05);
+      g.add(fog);
+    }
+    const splitter = new THREE.Mesh(new THREE.BoxGeometry(v.wid * 0.98, 0.07, 0.3), lambert(0x0d0d12));
+    splitter.position.set(0, 0.18, v.len / 2 - 0.1);
+    g.add(splitter);
+    const diffuser = new THREE.Mesh(new THREE.BoxGeometry(v.wid * 0.85, 0.08, 0.22), lambert(0x0d0d12));
+    diffuser.position.set(0, 0.16, -v.len / 2 + 0.08);
+    g.add(diffuser);
+    for (const sx of [-0.5, 0.5]) {
+      const exhaust = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.18, 10), lambert(0x3a3d44));
+      exhaust.rotation.x = Math.PI / 2;
+      exhaust.position.set(sx * (v.wid * 0.4), 0.18, -v.len / 2 - 0.03);
+      g.add(exhaust);
+    }
+    for (const sx of [-1, 1]) {
+      const doorSeam = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.5, 0.04), seamMat);
+      doorSeam.position.set(sx * (v.wid / 2 + 0.01), 0.55, 0.1);
+      g.add(doorSeam);
+      const handle = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.05, 0.34), lambert(0x111114));
+      handle.position.set(sx * (v.wid / 2 + 0.02), 0.78, 0.35);
+      g.add(handle);
+      const vent = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.22, 0.7), lambert(0x0d0d12));
+      vent.position.set(sx * (v.wid / 2 + 0.01), 0.6, -v.len * 0.28);
+      g.add(vent);
+      const sideGlass = new THREE.Mesh(planeGeo, new THREE.MeshPhongMaterial({ color: 0x0a1626, shininess: 200, specular: 0x8899bb }));
+      sideGlass.scale.set(v.len * 0.2, 0.34, 1);
+      sideGlass.position.set(sx * (v.wid * 0.31), 0.88, -0.3);
+      sideGlass.rotation.y = sx > 0 ? Math.PI / 2 : -Math.PI / 2;
+      g.add(sideGlass);
+    }
+    const antenna = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.03, 0.34, 6), lambert(0x111114));
+    antenna.position.set(0, 1.16, -v.len * 0.18);
+    g.add(antenna);
+    // Plat nomor "TC·RAKA" depan + belakang.
+    const plateTex = getPlateTex();
+    for (const sz of [1, -1]) {
+      const plate = new THREE.Mesh(planeGeo, new THREE.MeshBasicMaterial({ map: plateTex }));
+      plate.scale.set(0.95, 0.24, 1);
+      plate.position.set(0, 0.42, sz * (v.len / 2 + 0.06));
+      plate.rotation.y = sz > 0 ? 0 : Math.PI;
+      g.add(plate);
     }
     // Bar lampu belakang merah memanjang + strip LED depan putih.
     const tailBar = capsuleMesh(0.07, v.wid - 0.7, basic(0xff1a1a));
     tailBar.rotation.z = Math.PI / 2;
     tailBar.position.set(0, 0.78, -v.len / 2 - 0.02);
     g.add(tailBar);
-    const tailGlow = glowSprite(0xff2d2d, 1.3);
+    const tailGlow = glowSprite(0xff2d2d, 0.8);
     tailGlow.position.set(0, 0.8, -v.len / 2 - 0.3);
     g.add(tailGlow);
     const headBar = capsuleMesh(0.05, v.wid - 0.8, basic(0xfff6d8));
@@ -752,8 +984,9 @@ export function createRenderer(canvas) {
     pad.position.y = 0.05;
     g.add(pad);
     if (v.type === 'sport') {
-      // Spoiler GT: sayap kapsul pipih + 2 penyangga.
-      const wing = capsuleMesh(0.04, v.wid - 0.6, gloss(0x14141a, 160));
+      // Spoiler GT sewarna bodi (matte, tanpa strip specular putih):
+      // sayap kapsul pipih + 2 penyangga + endplate gelap.
+      const wing = capsuleMesh(0.04, v.wid - 0.6, lambert(g.userData.baseColor));
       wing.rotation.z = Math.PI / 2;
       wing.position.set(0, 0.98, -v.len / 2 + 0.3);
       g.add(wing);
@@ -761,6 +994,9 @@ export function createRenderer(canvas) {
         const strut = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.34, 8), lambert(0x14141a));
         strut.position.set(sx, 0.9, -v.len / 2 + 0.3);
         g.add(strut);
+        const endplate = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.34, 0.5), lambert(0x14141a));
+        endplate.position.set(sx * (v.wid / 2 - 0.28), 0.98, -v.len / 2 + 0.3);
+        g.add(endplate);
       }
     }
     if (v.type === 'police') {
@@ -844,7 +1080,7 @@ export function createRenderer(canvas) {
 
   // ---------- karakter jalan kaki: kapsul + bola, bukan balok ----------
   const personGroups = new Map();
-  function buildPerson(color, armed, enemy) {
+  function buildPerson(color, armed, enemy, hat) {
     const g = new THREE.Group();
     const shirt = lambert(color);
     const torso = capsuleMesh(0.3, 0.5, shirt);
@@ -857,6 +1093,28 @@ export function createRenderer(canvas) {
     hair.scale.set(1, 0.62, 1);
     hair.position.y = 1.8;
     g.add(hair);
+    if (hat === 'cap') {
+      const cap = new THREE.Mesh(new THREE.SphereGeometry(0.26, 14, 8), lambert(0x1c2f6e));
+      cap.scale.set(1, 0.55, 1);
+      cap.position.y = 1.86;
+      g.add(cap);
+      const brim = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.05, 0.22), lambert(0x1c2f6e));
+      brim.position.set(0, 1.84, 0.26);
+      g.add(brim);
+      // Rompi reflektif polisi: garis terang di dada.
+      const vest = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.09, 0.05), basic(0xd8e8ff));
+      vest.position.set(0, 1.05, 0.3);
+      g.add(vest);
+    } else if (hat === 'bandana') {
+      const band = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.25, 0.1, 12), lambert(0xc22a2a));
+      band.position.y = 1.8;
+      g.add(band);
+    } else if (hat) {
+      const cap2 = new THREE.Mesh(new THREE.SphereGeometry(0.26, 14, 8), lambert(hat));
+      cap2.scale.set(1, 0.55, 1);
+      cap2.position.y = 1.86;
+      g.add(cap2);
+    }
     for (const sx of [-0.16, 0.16]) {
       const leg = capsuleMesh(0.11, 0.45, lambert(0x222831));
       leg.position.set(sx, 0.36, 0);
@@ -889,14 +1147,18 @@ export function createRenderer(canvas) {
   function syncPeople(G, t) {
     const seen = new Set();
     const entries = [];
-    for (const ped of G.peds) entries.push({ e: ped, color: ped.color, armed: false, enemy: false });
-    for (const c of G.cops) entries.push({ e: c, color: 0x1c2f6e, armed: true, enemy: false });
-    for (const en of G.enemies) entries.push({ e: en, color: en.color, armed: true, enemy: true });
-    for (const { e, color, armed, enemy } of entries) {
+    const hatCols = [0x2e8a5b, 0xc22a2a, 0xe8a020, 0x8a5ec2, 0x2e6fb5];
+    for (const ped of G.peds) {
+      const h = Math.abs(Math.round(ped.x * 7 + ped.z * 13)) % 3 === 0 ? hatCols[Math.abs(Math.round(ped.x + ped.z)) % hatCols.length] : null;
+      entries.push({ e: ped, color: ped.color, armed: false, enemy: false, hat: h });
+    }
+    for (const c of G.cops) entries.push({ e: c, color: 0x1c2f6e, armed: true, enemy: false, hat: 'cap' });
+    for (const en of G.enemies) entries.push({ e: en, color: en.color, armed: true, enemy: true, hat: 'bandana' });
+    for (const { e, color, armed, enemy, hat } of entries) {
       seen.add(e);
       let g = personGroups.get(e);
       if (!g) {
-        g = buildPerson(color, armed, enemy);
+        g = buildPerson(color, armed, enemy, hat);
         personGroups.set(e, g);
         scene.add(g);
       }
@@ -982,19 +1244,19 @@ export function createRenderer(canvas) {
     scene.add(heliGroup);
     // Kerucut sorot + lingkaran cahaya di tanah + SpotLight sungguhan.
     const coneMat = new THREE.MeshBasicMaterial({
-      color: 0xfff0a0, transparent: true, opacity: 0.035,
+      color: 0xfff0a0, transparent: true, opacity: 0.02,
       blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide,
     });
-    spotCone = new THREE.Mesh(new THREE.ConeGeometry(6.5, 14, 20, 1, true), coneMat);
+    spotCone = new THREE.Mesh(new THREE.ConeGeometry(3.0, 14, 20, 1, true), coneMat);
     scene.add(spotCone);
     const circMat = new THREE.MeshBasicMaterial({
-      color: 0xfff0a0, transparent: true, opacity: 0.05,
+      color: 0xfff0a0, transparent: true, opacity: 0.04,
       blending: THREE.AdditiveBlending, depthWrite: false,
     });
-    spotCircle = new THREE.Mesh(new THREE.CircleGeometry(5, 24), circMat);
+    spotCircle = new THREE.Mesh(new THREE.CircleGeometry(3.0, 24), circMat);
     spotCircle.rotation.x = -Math.PI / 2;
     scene.add(spotCircle);
-    spotLight = new THREE.SpotLight(0xfff2b0, 0.75, 70, 0.42, 0.5, 1.1);
+    spotLight = new THREE.SpotLight(0xfff2b0, 0.9, 70, 0.30, 0.5, 1.1);
     spotTarget = new THREE.Object3D();
     scene.add(spotTarget);
     spotLight.target = spotTarget;
@@ -1041,7 +1303,7 @@ export function createRenderer(canvas) {
     }
   }
   const flashLight = webglOK ? new THREE.PointLight(0xffd23f, 0, 18) : null;
-  const flashSprite = webglOK ? new THREE.Sprite(new THREE.SpriteMaterial({ color: 0xffd23f, transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending, depthWrite: false })) : null;
+  const flashSprite = webglOK ? new THREE.Sprite(new THREE.SpriteMaterial({ map: getGlowTex(), color: 0xffe9a8, transparent: true, opacity: 0.98, blending: THREE.AdditiveBlending, depthWrite: false })) : null;
   if (webglOK) {
     scene.add(flashLight);
     flashSprite.scale.set(0.6, 0.6, 1);
@@ -1053,7 +1315,7 @@ export function createRenderer(canvas) {
     flashBeam.visible = false;
     scene.add(flashBeam);
   }
-  const RAIN_COUNT = 500;
+  const RAIN_COUNT = 700;
   const rainGeo = webglOK ? new THREE.BufferGeometry() : null;
   let rain = null;
   if (webglOK) {
@@ -1064,10 +1326,10 @@ export function createRenderer(canvas) {
       const x = (rnd() - 0.5) * 80;
       const y = rnd() * 28;
       const z = (rnd() - 0.5) * 80;
-      pos.set([x, y, z, x, y - 1.2, z], i * 6);
+      pos.set([x, y, z, x, y - 1.7, z], i * 6);
     }
     rainGeo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-    rain = new THREE.LineSegments(rainGeo, new THREE.LineBasicMaterial({ color: 0x8fa8cc, transparent: true, opacity: 0.5 }));
+    rain = new THREE.LineSegments(rainGeo, new THREE.LineBasicMaterial({ color: 0x8fa8cc, transparent: true, opacity: 0.65 }));
     rain.frustumCulled = false;
     rain.visible = false;
     scene.add(rain);
@@ -1102,7 +1364,7 @@ export function createRenderer(canvas) {
       amb = 0.7; sunI = 0.8; sunC = 0xff9a6a;
       sunDir = new THREE.Vector3(-0.75, 0.22, -0.15).normalize(); sunAmt = 0.8;
     } else if (hour >= 19 || hour < 6) {
-      top = 0x05060f; mid = 0x131a3a; bot = 0x2a1638; fog = 0x0b0e1a;
+      top = 0x05060f; mid = 0x131a3a; bot = 0x3d1f52; fog = 0x0b0e1a;
       amb = 0.62; sunI = 0.42; sunC = 0x9fb4ff;
       sunDir = new THREE.Vector3(0.3, 0.6, -0.4).normalize(); sunAmt = 0.25;
     } else {
@@ -1171,9 +1433,9 @@ export function createRenderer(canvas) {
         new THREE.Vector3(0, 1, 0),
         new THREE.Vector3(dx / dist, h.y / dist, dz / dist),
       );
-      spotCone.scale.set(0.4, Math.max(0.6, dist / 14), 0.4);
+      spotCone.scale.set(0.22, Math.max(0.6, dist / 14), 0.22);
       spotCircle.position.set(p.x, 0.09, p.z);
-      spotCircle.scale.set(0.65, 0.65, 1);
+      spotCircle.scale.set(0.45, 0.45, 1);
       spotLight.position.set(h.x, h.y - 0.5, h.z);
       spotTarget.position.set(p.x, 0, p.z);
     } else {
@@ -1187,8 +1449,9 @@ export function createRenderer(canvas) {
       const fx = p.x + Math.sin(p.aimAngle) * 1.4;
       const fz = p.z + Math.cos(p.aimAngle) * 1.4;
       flashLight.position.set(fx, 1.6, fz);
-      flashLight.intensity = 2;
+      flashLight.intensity = 3;
       flashSprite.position.set(fx, 1.6, fz);
+      flashSprite.scale.set(2.6, 2.6, 1);
       flashSprite.visible = true;
       if (G.flashTarget) {
         const tx = G.flashTarget.x;
@@ -1196,7 +1459,7 @@ export function createRenderer(canvas) {
         const len = Math.hypot(tx - fx, tz - fz);
         flashBeam.visible = true;
         flashBeam.position.set((fx + tx) / 2, 1.4, (fz + tz) / 2);
-        flashBeam.scale.set(0.16, 0.16, Math.max(0.5, len));
+        flashBeam.scale.set(0.09, 0.09, Math.max(0.5, len));
         flashBeam.lookAt(tx, 1.4, tz);
       } else {
         flashBeam.visible = false;
@@ -1273,8 +1536,8 @@ export function createRenderer(canvas) {
       camInit = false;
     } else if (G.screen === 'title') {
       if (G.titleFixed) {
-        camPos.set(10, 2.6, 30);
-        camLook.set(8, 4.5, 16);
+        camPos.set(9.5, 2.3, 29.5);
+        camLook.set(7.5, 1.4, 22);
       } else {
         const a = t * 0.05;
         camPos.set(Math.sin(a) * 85, 38 + Math.sin(t * 0.1) * 4, Math.cos(a) * 85);

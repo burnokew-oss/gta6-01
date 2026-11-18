@@ -115,6 +115,30 @@
   #fallback { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: #141021; color: #fff; z-index: 20; text-align: center; padding: 24px; }
   #fallback h1 { color: #ffd23f; }
   .hidden { display: none !important; }
+  /* Mode screenshot (ronde 3): panel lebih kecil + transparan, tengah
+     layar terbuka seperti referensi — HUD gameplay tidak berubah. */
+  body.shot-mode #panel-left { width: 148px; padding: 4px 7px; background: rgba(0,0,0,0.38); }
+  body.shot-mode #cash { font-size: 15px; }
+  body.shot-mode #weapons-line, body.shot-mode #rep-line { font-size: 10px; }
+  body.shot-mode #mission-panel { top: 92px; width: 190px; padding: 5px 7px; background: rgba(0,0,0,0.42); }
+  body.shot-mode #mission-panel .t { font-size: 11px; }
+  body.shot-mode #mission-panel .t span { display: none; }
+  body.shot-mode #mission-panel .s { display: none; }
+  body.shot-mode #mission-panel .n, body.shot-mode #mission-panel .s { font-size: 11px; }
+  body.shot-mode #mission-panel .r { font-size: 10px; }
+  body.shot-mode #police-panel { top: 212px; width: 182px; padding: 5px 7px; background: rgba(10,14,40,0.55); }
+  body.shot-mode #police-panel .u { font-size: 10px; }
+  body.shot-mode #police-panel .u .nm { width: 92px; }
+  body.shot-mode #dialog { width: 380px; padding: 6px 10px; background: rgba(10,14,20,0.72); }
+  body.shot-mode #dialog .txt, body.shot-mode #dialog .who { font-size: 12px; }
+  body.shot-mode #cover-strip { font-size: 10px; padding: 2px 8px; }
+  body.shot-mode #heli-warning { font-size: 12px; top: 30px; padding: 2px 10px; }
+  body.shot-mode #banner { font-size: 18px; top: 54px; }
+  body.shot-mode #objective { bottom: 110px; font-size: 12px; }
+  body.shot-mode #panel-right { font-size: 11px; }
+  body.shot-mode #stars { font-size: 17px; }
+  body.shot-mode #clock-line { font-size: 12px; }
+  body.shot-mode #speed-num { font-size: 28px; }
 </style>
 </head>
 <body>

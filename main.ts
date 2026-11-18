@@ -1,4 +1,6 @@
 // Teluk Cerah 3D — entrypoint penyerahan gta6-01 (Node 22, stdlib saja).
+// Ronde 3 v3-3d (18 Nov 2026): jalan cermin neon, mobil glossy berdetail,
+// fasad toko hidup, skyline + spotlight tajam, HUD ramping mode shot.
 //
 // Tugas file ini hanya satu: memeriksa paket entri sudah lengkap dan
 // sesuai batas, lalu menyalin game/ + screenshots/ ke direktori output
