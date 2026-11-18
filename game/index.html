@@ -71,9 +71,24 @@
   #title-screen h1 { margin: 0; font-size: 76px; font-weight: 800; letter-spacing: 4px; background: linear-gradient(90deg, #ff8c1a, #ff5e8a, #37c8e8); -webkit-background-clip: text; background-clip: text; color: transparent; }
   #title-screen .sub { font-size: 18px; letter-spacing: 2px; color: #eef1f5; margin-top: 6px; }
   #title-screen .tag { font-size: 17px; color: #ffd23f; margin-top: 10px; }
-  #crew { display: flex; gap: 60px; margin-top: 26px; }
+  #crew { display: flex; gap: 44px; margin-top: 26px; }
   #crew .c { text-align: center; }
-  #crew .face { width: 68px; height: 68px; border-radius: 50%; border: 2px solid #fff; display: flex; align-items: center; justify-content: center; font-size: 30px; font-weight: 700; margin: 0 auto; }
+  #crew .face { width: 68px; height: 68px; border-radius: 50%; border: 2px solid #fff; display: block; margin: 0 auto; position: relative; overflow: hidden; background: #e8b98a; }
+  #crew .face .hair { position: absolute; top: 0; left: 0; right: 0; height: 24px; background: #1c1c22; border-radius: 50% 50% 0 0; }
+  #crew .face .hair.gray { background: #8a8a92; }
+  #crew .face .hair.brown { background: #5a3a1a; }
+  #crew .face .hair.red { background: #a83226; }
+  #crew .face .hair.cap { background: #2e8a5b; height: 20px; }
+  #crew .face .hair.band { background: #8a5ec2; height: 12px; top: 14px; }
+  #crew .face .hair.bob { height: 34px; }
+  #crew .face .hair.bandana { background: #c22a2a; height: 18px; }
+  #crew .face .eye { position: absolute; top: 30px; width: 7px; height: 7px; border-radius: 50%; background: #1c1c22; }
+  #crew .face .eye.l { left: 18px; }
+  #crew .face .eye.r { right: 18px; }
+  #crew .face .mouth { position: absolute; top: 46px; left: 26px; width: 16px; height: 4px; border-radius: 2px; background: #7a3a2a; }
+  #crew .face .beard { position: absolute; bottom: 0; left: 12px; right: 12px; height: 22px; background: #1c1c22; border-radius: 0 0 34px 34px; }
+  #crew .face .glasses { position: absolute; top: 27px; left: 10px; right: 10px; height: 12px; border: 2px solid #111; border-radius: 6px; }
+  #crew .face .glasses::after { content: ""; position: absolute; left: 50%; top: 4px; width: 8px; height: 2px; margin-left: -4px; background: #111; }
   #crew .nm { font-size: 16px; margin-top: 8px; }
   #crew .rl { font-size: 13px; color: #aaa; }
   #continue-box { margin-top: 30px; font-size: 18px; color: #7dff8a; background: rgba(125,255,138,0.12); border: 1px solid #7dff8a; padding: 8px 16px; max-width: 620px; text-align: center; }
@@ -86,7 +101,7 @@
   #map-left { flex: none; }
   #map-title { font-size: 30px; color: #ffd23f; font-weight: 700; }
   #map-hint { font-size: 14px; color: #aaa; margin: 4px 0 10px; }
-  #mapcanvas { border: 2px solid #fff; display: block; background: #557a45; }
+  #mapcanvas { border: 2px solid #fff; display: block; background: #0d1526; }
   #map-right { flex: 1; min-width: 420px; }
   #map-right h2 { color: #ffd23f; font-size: 20px; margin: 8px 0 6px; }
   #mission-list div { font-size: 15px; line-height: 1.65; }
@@ -148,10 +163,12 @@
   <div class="sub">OPEN-WORLD CRIME 3D · 10 MISI · HELIKOPTER · RADIO · GARAGE</div>
   <div class="tag">Tiga tahun merantau, Raka pulang ke Teluk Cerah.</div>
   <div id="crew">
-    <div class="c"><div class="face" style="background:#2e6fb5">R</div><div class="nm">Raka</div><div class="rl">Protagonis</div></div>
-    <div class="c"><div class="face" style="background:#e8a020">B</div><div class="nm">Bu Sari</div><div class="rl">Fixer</div></div>
-    <div class="c"><div class="face" style="background:#2e8a5b">D</div><div class="nm">Dimas</div><div class="rl">Mekanik</div></div>
-    <div class="c"><div class="face" style="background:#8a5ec2">N</div><div class="nm">Nadia</div><div class="rl">Pembalap</div></div>
+    <div class="c"><div class="face"><span class="hair"></span><span class="eye l"></span><span class="eye r"></span><span class="mouth"></span></div><div class="nm">Raka</div><div class="rl">Protagonis</div></div>
+    <div class="c"><div class="face"><span class="hair gray"></span><span class="eye l"></span><span class="eye r"></span><span class="mouth"></span></div><div class="nm">Bu Sari</div><div class="rl">Fixer</div></div>
+    <div class="c"><div class="face"><span class="hair cap"></span><span class="eye l"></span><span class="eye r"></span><span class="mouth"></span></div><div class="nm">Dimas</div><div class="rl">Mekanik</div></div>
+    <div class="c"><div class="face"><span class="hair band"></span><span class="eye l"></span><span class="eye r"></span><span class="mouth"></span></div><div class="nm">Nadia</div><div class="rl">Pembalap</div></div>
+    <div class="c"><div class="face"><span class="hair bob brown"></span><span class="glasses"></span><span class="eye l"></span><span class="eye r"></span><span class="mouth"></span></div><div class="nm">Sinta</div><div class="rl">Peretas</div></div>
+    <div class="c"><div class="face"><span class="hair bandana"></span><span class="eye l"></span><span class="eye r"></span><span class="beard"></span></div><div class="nm">Bimo</div><div class="rl">Penjaga</div></div>
   </div>
   <div id="continue-box" class="hidden"></div>
   <div id="title-menu">ENTER — New Game<br><span id="title-continue-line" class="hidden">L — Lanjutkan save</span></div>

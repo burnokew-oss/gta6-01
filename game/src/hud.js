@@ -60,6 +60,19 @@ export function createHud() {
     for (const b of G.city.buildings) {
       c.fillRect((b.x - b.w / 2 + ox) * sc, (b.z - b.d / 2 + ox) * sc, Math.max(1, b.w * sc), Math.max(1, b.d * sc));
     }
+    // Lingkaran zona pencarian merah di sekitar pemain (radius 40 dunia).
+    const zx = (G.player.x + ox) * sc;
+    const zy = (G.player.z + ox) * sc;
+    const zr = 40 * sc;
+    c.fillStyle = 'rgba(255,45,45,0.16)';
+    c.beginPath();
+    c.arc(zx, zy, zr, 0, Math.PI * 2);
+    c.fill();
+    c.strokeStyle = '#ff2d2d';
+    c.lineWidth = 2;
+    c.beginPath();
+    c.arc(zx, zy, zr, 0, Math.PI * 2);
+    c.stroke();
     function dot(x, z, color, r) {
       c.fillStyle = color;
       c.beginPath();
@@ -96,6 +109,15 @@ export function createHud() {
     c.beginPath();
     c.arc(S / 2, S / 2, S / 2, 0, Math.PI * 2);
     c.stroke();
+    // Label zona pencarian di dalam lingkaran minimap (atas, supaya
+    // tidak terpotong masker bundar CSS di tepi bawah).
+    c.font = 'bold 9px system-ui, sans-serif';
+    c.textAlign = 'center';
+    c.lineWidth = 3;
+    c.strokeStyle = 'rgba(0,0,0,0.85)';
+    c.strokeText('ZONA PENCARIAN', S / 2, 16);
+    c.fillStyle = '#ff2d2d';
+    c.fillText('ZONA PENCARIAN', S / 2, 16);
   }
 
   function drawMapCanvas(G) {
@@ -103,30 +125,36 @@ export function createHud() {
     const sc = ms / 260;
     const ox = 130;
     const c = mapCtx;
-    c.fillStyle = '#6f7f56';
+    // Palet malam neon: dasar navy gelap, bukan hijau siang.
+    c.fillStyle = '#0d1526';
     c.fillRect(0, 0, ms, ms);
-    c.fillStyle = '#2a6a9a';
+    c.fillStyle = '#0a2038';
     c.fillRect(0, 0, 8 * sc, ms);
-    c.fillStyle = '#d8c08a';
+    c.fillStyle = '#16233d';
     c.fillRect(8 * sc, 0, 6 * sc, ms);
-    // Bangunan diwarnai per distrik (zona hidup, bukan abu-abu datar).
+    // Bangunan gelap per distrik (zona malam, bukan warna siang).
+    const DISTRICT_DARK = { Marina: '#1a2a44', 'Kota Tua': '#2a2138', CBD: '#14263d', Perumahan: '#1c2f22', Pelabuhan: '#33222a' };
     for (const b of G.city.buildings) {
-      c.fillStyle = DISTRICT_COLORS[b.district] || `#${b.color.toString(16).padStart(6, '0')}`;
+      c.fillStyle = DISTRICT_DARK[b.district] || `#${b.color.toString(16).padStart(6, '0')}`;
       c.fillRect((b.x - b.w / 2 + ox) * sc, (b.z - b.d / 2 + ox) * sc, Math.max(2, b.w * sc), Math.max(2, b.d * sc));
     }
-    c.strokeStyle = '#d8c890';
-    c.lineWidth = 6;
+    // Jalan: garis neon cyan tipis bercahaya.
+    c.strokeStyle = '#22d3ee';
+    c.lineWidth = 3;
+    c.shadowColor = '#22d3ee';
+    c.shadowBlur = 6;
     for (const l of G.city.lines) {
       const p = (l + ox) * sc;
       c.beginPath(); c.moveTo(p, 0); c.lineTo(p, ms); c.stroke();
       c.beginPath(); c.moveTo(0, p); c.lineTo(ms, p); c.stroke();
     }
+    c.shadowBlur = 0;
     c.font = 'bold 17px system-ui, sans-serif';
     c.textAlign = 'center';
     const districts = [
       { n: 'Marina', x: -98, z: 0 },
       { n: 'Kota Tua', x: -32, z: 12 },
-      { n: 'CBD', x: 56, z: 12 },
+      { n: 'CBD', x: 78, z: -10 },
       { n: 'Perumahan', x: 12, z: -98 },
       { n: 'Pelabuhan', x: 34, z: 88 },
     ];
@@ -139,7 +167,7 @@ export function createHud() {
     c.shadowBlur = 0;
     // Label grid ala peta kota (A–F / 1–5).
     c.font = '12px system-ui, sans-serif';
-    c.fillStyle = '#aaa';
+    c.fillStyle = '#7fb5d8';
     'ABCDEF'.split('').forEach((ch, i) => c.fillText(ch, (i + 0.5) * (ms / 6), 14));
     '12345'.split('').forEach((ch, i) => c.fillText(ch, 10, (i + 0.5) * (ms / 5)));
     function mdot(x, z, color, r) {

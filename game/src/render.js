@@ -208,7 +208,7 @@ export function createRenderer(canvas) {
     // Neon sign: papan nama bercahaya di fasad gedung dekat jalan +
     // pantulan warnanya di aspal basah (tekstur canvas prosedural,
     // tanpa aset eksternal).
-    const NEON_TEXTS = ['KLUB', 'DISKO', 'NEON NIGHTS', 'ROOFTOP BAR', 'ARCADE 24/7', 'WARUNG', 'KAFE', 'HOTEL', 'BAR', 'SINEMA', 'PIZZA', 'KARAOKE', 'BILLIARD', 'TOKO 24 JAM'];
+    const NEON_TEXTS = ['KLUB', 'DISKO', 'WARUNG KOPI', 'ROOFTOP BAR', 'ARCADE 24/7', 'WARUNG', 'KAFE', 'HOTEL', 'BAR', 'SINEMA', 'PIZZA', 'KARAOKE', 'BILLIARD', 'TOKO 24 JAM'];
     const NEON_COLORS = ['#ff2d78', '#00e5ff', '#ffe14d', '#39ff6a', '#ff6a00', '#c26aff', '#ff3b30'];
     const neonTexCache = new Map();
     function neonTexture(text, color) {
@@ -248,11 +248,11 @@ export function createRenderer(canvas) {
       sign.rotation.y = f.ry;
       scene.add(sign);
       // Pantulan neon di aspal basah (kotak tipis additif, mencapai jalan).
-      const sx = f.nz !== 0 ? w * 0.6 : 9;
-      const sz = f.nz !== 0 ? 9 : w * 0.6;
+      const sx = f.nz !== 0 ? w * 0.9 : 13;
+      const sz = f.nz !== 0 ? 13 : w * 0.9;
       const reach = (f.gap || 0) * 0.5 + 1.5;
       putBox(scene, f.px + f.nx * reach, 0.09, f.pz + f.nz * reach, sx, 0.05, sz,
-        new THREE.MeshBasicMaterial({ color: new THREE.Color(color), transparent: true, opacity: 0.28, blending: THREE.AdditiveBlending, depthWrite: false }));
+        new THREE.MeshBasicMaterial({ color: new THREE.Color(color), transparent: true, opacity: 0.45, blending: THREE.AdditiveBlending, depthWrite: false }));
     }
     city.buildings.forEach((b, bi) => {
       if (b.h < 6 || bi % 3 !== 0) return;
@@ -311,9 +311,10 @@ export function createRenderer(canvas) {
     const bbTex = new THREE.CanvasTexture(bbCanvas);
     bbTex.anisotropy = 4;
     const billboard = new THREE.Mesh(planeGeo, new THREE.MeshBasicMaterial({ map: bbTex, side: THREE.DoubleSide }));
-    billboard.scale.set(18, 6.5, 1);
-    // Menghadap timur (ke kamera chase) — dekat supaya besar di frame.
-    billboard.position.set(20, 7, 22);
+    billboard.scale.set(14, 5.2, 1);
+    // Menghadap timur (ke kamera chase) — digeser ke barat + selatan supaya
+    // tidak menutupi titik hilang jalan (ala referensi: papan di sisi jalan).
+    billboard.position.set(-20, 8, 26);
     billboard.rotation.y = Math.PI / 2;
     scene.add(billboard);
     // Palem koridor: deret palem tinggi berbatang merah di tepi jalan
@@ -400,7 +401,9 @@ export function createRenderer(canvas) {
     g.userData.body = body;
     g.userData.bodyMat = bodyMat;
     g.userData.baseColor = v.color;
-    putBox(g, 0, 1.0, -0.3, v.wid - 0.4, 0.45, v.len * 0.42, lambert(0x3a5a7a)); // kabin
+    // Kabin: warna bodi digelapkan (bukan biru baja) — hero merah tetap merah.
+    const cabCol = new THREE.Color(v.color).multiplyScalar(0.65).getHex();
+    putBox(g, 0, 1.0, -0.3, v.wid - 0.4, 0.45, v.len * 0.42, lambert(cabCol)); // kabin
     const wheelGeo = new THREE.CylinderGeometry(0.32, 0.32, 0.3, 10);
     const wheelMat = lambert(0x0d0d0f);
     for (const [wx, wz] of [[-0.85, 1.45], [0.85, 1.45], [-0.85, -1.45], [0.85, -1.45]]) {
@@ -543,13 +546,13 @@ export function createRenderer(canvas) {
     scene.add(heliGroup);
     // Kerucut spotlight + lingkaran cahaya di tanah.
     const coneMat = new THREE.MeshBasicMaterial({
-      color: 0xfff0a0, transparent: true, opacity: 0.12,
+      color: 0xfff0a0, transparent: true, opacity: 0.05,
       blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide,
     });
     spotCone = new THREE.Mesh(new THREE.ConeGeometry(6, 14, 20, 1, true), coneMat);
     scene.add(spotCone);
     const circMat = new THREE.MeshBasicMaterial({
-      color: 0xfff0a0, transparent: true, opacity: 0.28,
+      color: 0xfff0a0, transparent: true, opacity: 0.06,
       blending: THREE.AdditiveBlending, depthWrite: false,
     });
     spotCircle = new THREE.Mesh(new THREE.CircleGeometry(5, 24), circMat);
@@ -606,9 +609,15 @@ export function createRenderer(canvas) {
   const flashSprite = webglOK ? new THREE.Sprite(new THREE.SpriteMaterial({ color: 0xffd23f, transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending, depthWrite: false })) : null;
   if (webglOK) {
     scene.add(flashLight);
-    flashSprite.scale.set(1.1, 1.1, 1);
+    flashSprite.scale.set(0.8, 0.8, 1);
     flashSprite.visible = false;
     scene.add(flashSprite);
+  }
+  // ---- garis tembak kuning persisten (balok additif laras -> musuh) ----
+  const flashBeam = webglOK ? new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial({ color: 0xffd23f, transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending, depthWrite: false })) : null;
+  if (webglOK) {
+    flashBeam.visible = false;
+    scene.add(flashBeam);
   }
 
   // ---- hujan: garis-garis vertikal di sekitar pemain (aktif bila G.rain) ----
@@ -741,8 +750,9 @@ export function createRenderer(canvas) {
         new THREE.Vector3(0, 1, 0),
         new THREE.Vector3(dx / dist, h.y / dist, dz / dist),
       );
-      spotCone.scale.set(1, Math.max(0.6, dist / 14), 1);
+      spotCone.scale.set(0.45, Math.max(0.6, dist / 14), 0.45);
       spotCircle.position.set(p.x, 0.09, p.z);
+      spotCircle.scale.set(0.4, 0.4, 1); // cakram sorot kecil, jangan tutupi jalan/mobil
     } else {
       heliGroup.visible = false;
       spotCone.visible = false;
@@ -757,9 +767,22 @@ export function createRenderer(canvas) {
       flashLight.intensity = 3;
       flashSprite.position.set(fx, 1.6, fz);
       flashSprite.visible = true;
+      // Balok tracer persisten laras -> target (tidak ikut decay peluru).
+      if (G.flashTarget) {
+        const tx = G.flashTarget.x;
+        const tz = G.flashTarget.z;
+        const len = Math.hypot(tx - fx, tz - fz);
+        flashBeam.visible = true;
+        flashBeam.position.set((fx + tx) / 2, 1.4, (fz + tz) / 2);
+        flashBeam.scale.set(0.16, 0.16, Math.max(0.5, len));
+        flashBeam.lookAt(tx, 1.4, tz);
+      } else {
+        flashBeam.visible = false;
+      }
     } else {
       flashLight.intensity = 0;
       flashSprite.visible = false;
+      flashBeam.visible = false;
     }
 
     // Tracer peluru.
@@ -826,11 +849,17 @@ export function createRenderer(canvas) {
     }
 
     // ---- kamera ----
-    if (G.screen === 'title') {
+    if (G.shotCam) {
+      // Kamera staging deterministik (?shot=): posisi + tatapan persis,
+      // tanpa lerp — dipakai shot chase/shootout supaya hero besar di frame.
+      camPos.set(G.shotCam.px, G.shotCam.py, G.shotCam.pz);
+      camLook.set(G.shotCam.lx, G.shotCam.ly, G.shotCam.lz);
+      camInit = false;
+    } else if (G.screen === 'title') {
       if (G.titleFixed) {
-        // Poster: mobil hero + Raka besar di kiri bawah, kota neon di belakang.
-        camPos.set(24, 3.5, 26);
-        camLook.set(10, 8, -30);
+        // Poster: mobil hero + Raka besar di foreground kiri-bawah, kota neon di belakang.
+        camPos.set(10, 2.6, 30);
+        camLook.set(8, 4.5, 16);
       } else {
         const a = t * 0.05;
         camPos.set(Math.sin(a) * 85, 38 + Math.sin(t * 0.1) * 4, Math.cos(a) * 85);

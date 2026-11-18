@@ -108,18 +108,32 @@ export function stageShot(name, G) {
     G.cops.splice(4); // panel: heli + 4 mobil + 4 polisi jalan kaki
     car.speed = 19; // 152 km/j di speedometer
     if (G.heli) {
-      G.heli.x = G.player.x - 20;
+      G.heli.x = G.player.x - 14;
       G.heli.z = G.player.z - 2;
-      G.heli.y = 17;
+      G.heli.y = 13;
     }
     for (const v of G.vehicles) {
       if (v.type === 'police') v.dead = true; // bersihkan hasil kejar-kejaran sim
     }
     G.vehicles = G.vehicles.filter((v) => !v.dead);
+    // Bersihkan mobil lalu-lalang/parkir yang menempel di sekitar hero
+    // (menutupi mobil hero dari kamera rapat) — hero + polisi tetap.
+    G.vehicles = G.vehicles.filter((v) => v === car || v.type === 'police' || Math.hypot(v.x - car.x, v.z - car.z) > 12);
     placeCopCar(G, -18, -3.5, -Math.PI / 2, 'CENDRAWASIH-07', 'PURSUIT');
     placeCopCar(G, -24, 4, -Math.PI / 2, 'JALAK-42', 'RAMMING');
     placeCopCar(G, -13, 0.5, -Math.PI / 2, 'BANGAU-18', 'PURSUIT');
-    placeCopCar(G, 10, -4, Math.PI / 2, 'ELANG-11', 'PURSUIT');
+    placeCopCar(G, -10, -5.5, -Math.PI / 2, 'ELANG-11', 'PURSUIT');
+    // Kamera chase ala referensi: di belakang-utara mobil, memandang ke
+    // barat daya — hero 3/4 tengah-bawah, jalan lurus ke titik hilang,
+    // papan TELUK FM geser ke kiri, polisi kanan-depan masuk frame.
+    // Dialog dipindah ke bawah sekali (ala referensi: tanpa dialog di
+    // tengah frame) supaya badan mobil hero tidak tertutup kotak dialog.
+    const dlg = document.getElementById('dialog');
+    if (dlg) dlg.style.bottom = '10px';
+    G.shotCam = {
+      px: car.x + 7, py: 2.6, pz: car.z - 1.5,
+      lx: car.x - 8, ly: 1.0, lz: car.z + 0.5,
+    };
     return { screen: SCREEN_PLAY };
   }
   if (name === '2') {
@@ -153,7 +167,44 @@ export function stageShot(name, G) {
     G.input.mouse.down = true;
     simulate(G, 1.5, false);
     G.input.mouse.down = false;
-    G.muzzleFlash = 0.07; // kilat moncong tetap menyala di frame
+    // Musuh dirapatkan ke depan pemain (baris dekat, bukan kejauhan),
+    // digeser ke kanan garis bidik supaya tracer melintang di frame.
+    G.enemies.forEach((en, i) => {
+      en.x = G.player.x - 5 - i * 2.2;
+      en.z = G.player.z - 3.5 + (i % 2) * 2;
+    });
+    const e0 = G.enemies[0];
+    if (e0) {
+      G.aimOverride = { x: e0.x, z: e0.z };
+      G.player.aimAngle = Math.atan2(e0.x - G.player.x, e0.z - G.player.z);
+      G.player.angle = G.player.aimAngle;
+    }
+    // Kamera on-foot dekat + offset samping: pemain di x ~30% frame, tinggi
+    // ~30-35% frame, terlihat dari samping-belakang (laras + musuh di kanan).
+    // Bukan jarak kamera mobil.
+    const a = G.player.angle;
+    const fx = Math.sin(a);
+    const fz = Math.cos(a);
+    const rx = -Math.cos(a);
+    const rz = Math.sin(a);
+    G.shotCam = {
+      px: G.player.x - fx * 4.5 + rx * 2.0,
+      py: 1.9,
+      pz: G.player.z - fz * 4.5 + rz * 2.0,
+      lx: G.player.x + fx * 6 + rx * 2.4,
+      ly: 0.6,
+      lz: G.player.z + fz * 6 + rz * 2.4,
+    };
+    // Flash + tracer PERSISTEN sampai __shotReady: mode ?shot= tidak
+    // menjalankan stepGame lagi, jadi nilai ini tidak decay sebelum frame
+    // tertangkap (pelajaran shot lama: 0,07 dtk habis sebelum screenshot).
+    G.muzzleFlash = 5;
+    if (e0) {
+      const mx = G.player.x + fx * 1.4;
+      const mz = G.player.z + fz * 1.4;
+      G.bullets.push({ x: e0.x, z: e0.z, px: mx, pz: mz, angle: a, speed: 0, life: 99, from: 'player' });
+      G.flashTarget = { x: e0.x, z: e0.z }; // ujung balok tracer persisten
+    }
     if (G.heli) {
       G.heli.x = G.player.x - 7;
       G.heli.z = G.player.z - 3;
@@ -181,12 +232,12 @@ export function stageShot(name, G) {
   G.clock = 21 * 60; // malam 21:00 — neon + hujan di backdrop
   G.rain = true;
   G.titleFixed = true; // kamera poster: mobil hero besar di kiri bawah
-  const hero = makeVehicle(G.rng, 'sport', 12, 18, -Math.PI / 2);
+  const hero = makeVehicle(G.rng, 'sport', 3, 20, -Math.PI / 2);
   hero.color = 0xd42a2a;
   G.vehicles.push(hero);
-  G.player.x = 18;
-  G.player.z = 20;
-  G.player.angle = Math.PI / 4; // Raka menghadap kamera, di samping mobil
+  G.player.x = 2;
+  G.player.z = 22;
+  G.player.angle = 0.79; // Raka menghadap kamera, di samping mobil
   G.player.onFoot = true;
   writeSave(0, {
     cash: 14830, health: 82, armor: 64, x: 0, z: 0,
