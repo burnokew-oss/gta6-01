@@ -1,10 +1,10 @@
-// Helikopter polisi "GARUDA-1": muncul di wanted >= 3, terbang mengikuti
-// pemain dari atas-depan, menyorot dengan spotlight, dan bikin kamera
-// sedikit bergetar saat dekat. Hilang saat wanted turun di bawah 3.
+// Helikopter polisi "GARUDA-1": muncul di wanted >= 3, terbang
+// mengikuti pemain dari atas-depan, menyorot dengan spotlight, dan
+// bikin kamera sedikit bergetar saat dekat. Hilang saat wanted turun
+// di bawah 3.
 //
-// Posisi heli disimpan di bidang XZ + ketinggian y (12-16 unit) —
-// renderer menggambar bodi, rotor berputar, kerucut sorot, dan lingkaran
-// cahaya di tanah di bawahnya.
+// Ronde 2: titik hover lebih dekat (10 unit di depan pemain, bukan 14)
+// supaya bodi heli + kerucut sorot terbaca besar di frame chase.
 import { HELI_MIN_WANTED, HELI_NAME } from './config.js';
 
 export function updateHelicopter(G, dt) {
@@ -22,10 +22,8 @@ export function updateHelicopter(G, dt) {
     }
     const h = G.heli;
     h.rotor += dt * 28;
-    // Titik hover: di depan pemain (searah hadap), supaya kerucut sorot
-    // masuk frame kamera chase yang menghadap ke depan.
-    const tx = G.player.x + Math.sin(G.player.angle) * 14;
-    const tz = G.player.z + Math.cos(G.player.angle) * 14;
+    const tx = G.player.x + Math.sin(G.player.angle) * 10;
+    const tz = G.player.z + Math.cos(G.player.angle) * 10;
     const dx = tx - h.x;
     const dz = tz - h.z;
     const d = Math.hypot(dx, dz);
@@ -36,7 +34,6 @@ export function updateHelicopter(G, dt) {
     }
     h.y += (14 - h.y) * Math.min(1, dt * 2);
     h.angle = Math.atan2(G.player.x - h.x, G.player.z - h.z);
-    // Sorot bikin kamera sedikit bergetar saat heli dekat.
     if (d < 30) G.shake = Math.max(G.shake, 2.5);
   } else if (G.heli) {
     G.heli = null;

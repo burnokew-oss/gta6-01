@@ -10,61 +10,61 @@
   #status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
   #hud { position: fixed; inset: 0; pointer-events: none; color: #fff; text-shadow: 0 1px 3px #000; z-index: 5; }
   .panel { position: absolute; background: rgba(0,0,0,0.5); border-radius: 6px; padding: 8px 12px; line-height: 1.45; }
-  #panel-left { top: 10px; left: 10px; width: 300px; }
-  #cash { font-size: 24px; font-weight: 700; color: #7dff8a; }
-  .barwrap { display: flex; align-items: center; gap: 6px; font-size: 13px; }
-  .bar { flex: 1; height: 10px; background: #111; border: 1px solid #000; }
+  #panel-left { top: 8px; left: 8px; width: 200px; padding: 6px 9px; }
+  #cash { font-size: 19px; font-weight: 700; color: #7dff8a; }
+  .barwrap { display: flex; align-items: center; gap: 6px; font-size: 11px; }
+  .bar { flex: 1; height: 7px; background: #111; border: 1px solid #000; }
   .bar > i { display: block; height: 100%; }
-  #weapons-line, #rep-line { font-size: 13px; }
+  #weapons-line, #rep-line { font-size: 11px; }
   #rep-line { color: #ffd23f; }
-  #mission-panel { top: 156px; left: 10px; width: 300px; border: 1px solid #ffd23f; }
-  #mission-panel .t { color: #ffd23f; font-size: 15px; font-weight: 700; }
-  #mission-panel .s { font-size: 14px; letter-spacing: 4px; line-height: 1.2; }
-  #mission-panel .n { font-size: 14px; }
-  #mission-panel .r { color: #7dff8a; font-size: 13px; }
-  #police-panel { top: 246px; left: 10px; width: 300px; border: 1px solid #3f7fff; background: rgba(10,14,40,0.72); }
-  #police-panel .t { color: #7fb5ff; font-size: 14px; font-weight: 700; }
-  #police-panel .u { display: flex; font-size: 13px; }
-  #police-panel .u .nm { width: 118px; }
+  #mission-panel { top: 112px; left: 8px; width: 205px; border: 1px solid #ffd23f; padding: 6px 9px; }
+  #mission-panel .t { color: #ffd23f; font-size: 13px; font-weight: 700; }
+  #mission-panel .s { font-size: 12px; letter-spacing: 4px; line-height: 1.2; }
+  #mission-panel .n { font-size: 12px; }
+  #mission-panel .r { color: #7dff8a; font-size: 11px; }
+  #police-panel { top: 208px; left: 8px; width: 218px; border: 1px solid #3f7fff; background: rgba(10,14,40,0.72); padding: 6px 9px; }
+  #police-panel .t { color: #7fb5ff; font-size: 12px; font-weight: 700; }
+  #police-panel .u { display: flex; font-size: 11px; }
+  #police-panel .u .nm { width: 108px; }
   #police-panel .u .st { flex: 1; color: #ffd23f; }
   #police-panel .u .ds { color: #aaa; }
-  #panel-right { top: 10px; right: 10px; text-align: right; background: none; padding: 0; max-width: 460px; }
-  #weapon-slots { margin-top: 6px; }
-  #weapon-slots span { display: inline-block; border: 1px solid #666; background: rgba(0,0,0,0.55); padding: 2px 7px; margin-left: 4px; font-size: 12px; border-radius: 3px; color: #ddd; }
+  #panel-right { top: 8px; right: 12px; text-align: right; background: none; padding: 0; max-width: 300px; }
+  #weapon-slots { margin-top: 4px; }
+  #weapon-slots span { display: inline-block; border: 1px solid #666; background: rgba(0,0,0,0.55); padding: 1px 4px; margin-left: 3px; font-size: 10px; border-radius: 3px; color: #ddd; }
   #weapon-slots span.on { border-color: #ffd23f; color: #ffd23f; background: rgba(255,210,63,0.15); }
-  #stars { font-size: 26px; letter-spacing: 3px; color: #ffd23f; }
-  #wanted-line { font-size: 15px; color: #ff6b5e; }
-  #clock-line { font-size: 18px; }
-  #progress-line { font-size: 14px; color: #ffd23f; }
-  #radio-line { font-size: 14px; color: #7dff8a; }
-  #radio-artist { font-size: 13px; color: #ddd; }
-  #heli-warning { top: 168px; left: 50%; transform: translateX(-50%); background: rgba(120,0,0,0.65); font-size: 22px; font-weight: 700; color: #ff6b5e; padding: 4px 16px; }
-  #cover-strip { top: 300px; left: 340px; background: rgba(0,0,0,0.62); font-size: 14px; color: #7dff8a; white-space: nowrap; }
-  #banner { top: 110px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.6); font-size: 30px; font-weight: 700; color: #ffd23f; white-space: nowrap; }
-  #objective { bottom: 96px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.55); font-size: 17px; white-space: nowrap; max-width: 90vw; overflow: hidden; text-overflow: ellipsis; }
-  #dialog { bottom: 190px; left: 50%; transform: translateX(-50%); width: 640px; background: rgba(10,14,20,0.85); border: 1px solid #ffd23f; display: flex; gap: 12px; padding: 10px 14px; }
-  #portrait { width: 52px; height: 52px; border-radius: 50%; border: 2px solid #fff; flex: none; display: flex; align-items: center; justify-content: center; font-size: 26px; font-weight: 700; }
-  #dialog .who { color: #ffd23f; font-size: 17px; font-weight: 700; }
-  #dialog .txt { font-size: 16px; line-height: 1.4; }
-  #shop-panel { left: 10px; bottom: 230px; width: 560px; background: rgba(10,14,20,0.88); border: 1px solid #7dff8a; }
-  #shop-panel .t { color: #7dff8a; font-size: 16px; font-weight: 700; }
-  #shop-panel .it { font-size: 15px; }
-  #radio-toast { top: 250px; left: 50%; transform: translateX(-50%); font-size: 18px; color: #7dff8a; background: none; }
+  #stars { font-size: 20px; letter-spacing: 3px; color: #ffd23f; }
+  #wanted-line { font-size: 12px; color: #ff6b5e; }
+  #clock-line { font-size: 14px; }
+  #progress-line { font-size: 12px; color: #ffd23f; }
+  #radio-line { font-size: 12px; color: #7dff8a; }
+  #radio-artist { font-size: 11px; color: #ddd; }
+  #heli-warning { top: 36px; left: 50%; transform: translateX(-50%); background: rgba(120,0,0,0.65); font-size: 14px; font-weight: 700; color: #ff6b5e; padding: 3px 12px; }
+  #cover-strip { top: 6px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.55); font-size: 11px; color: #7dff8a; white-space: nowrap; max-width: 92vw; overflow: hidden; padding: 3px 10px; }
+  #banner { top: 64px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.6); font-size: 22px; font-weight: 700; color: #ffd23f; white-space: nowrap; }
+  #objective { bottom: 88px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.55); font-size: 13px; white-space: nowrap; max-width: 90vw; overflow: hidden; text-overflow: ellipsis; }
+  #dialog { bottom: 10px; left: 50%; transform: translateX(-50%); width: 470px; background: rgba(10,14,20,0.85); border: 1px solid #ffd23f; display: flex; gap: 10px; padding: 8px 12px; }
+  #portrait { width: 38px; height: 38px; border-radius: 50%; border: 2px solid #fff; flex: none; display: flex; align-items: center; justify-content: center; font-size: 20px; font-weight: 700; }
+  #dialog .who { color: #ffd23f; font-size: 13px; font-weight: 700; }
+  #dialog .txt { font-size: 13px; line-height: 1.4; }
+  #shop-panel { left: 10px; bottom: 170px; width: 420px; background: rgba(10,14,20,0.88); border: 1px solid #7dff8a; }
+  #shop-panel .t { color: #7dff8a; font-size: 14px; font-weight: 700; }
+  #shop-panel .it { font-size: 13px; }
+  #radio-toast { top: 120px; left: 50%; transform: translateX(-50%); font-size: 13px; color: #7dff8a; background: none; }
   #speed-box { right: 16px; bottom: 16px; text-align: right; background: none; padding: 0; }
-  #speed-num { font-size: 40px; font-weight: 700; line-height: 1; }
-  #speed-unit { font-size: 16px; color: #aaa; }
-  #car-cond { font-size: 14px; color: #7dff8a; }
-  #nos-line { font-size: 14px; color: #7fb5ff; }
-  #nos-bar { width: 200px; height: 10px; background: #111; border: 1px solid #000; margin-left: auto; }
+  #speed-num { font-size: 32px; font-weight: 700; line-height: 1; }
+  #speed-unit { font-size: 14px; color: #aaa; }
+  #car-cond { font-size: 12px; color: #7dff8a; }
+  #nos-line { font-size: 12px; color: #7fb5ff; }
+  #nos-bar { width: 140px; height: 8px; background: #111; border: 1px solid #000; margin-left: auto; }
   #nos-bar > i { display: block; height: 100%; background: #7fb5ff; }
   #minimap-wrap { left: 14px; bottom: 14px; background: none; padding: 0; text-align: center; }
   #minimap { border: 2px solid rgba(255,255,255,0.55); border-radius: 50%; background: rgba(0,0,0,0.35); display: block; }
-  #district-label { font-size: 14px; margin-top: 4px; }
+  #district-label { font-size: 11px; margin-top: 3px; }
   #crosshair { left: 50%; top: 50%; width: 20px; height: 20px; margin: -10px 0 0 -10px; background: none; padding: 0; }
   #crosshair::before, #crosshair::after { content: ""; position: absolute; background: #fff; }
   #crosshair::before { left: 9px; top: 0; width: 2px; height: 20px; }
   #crosshair::after { left: 0; top: 9px; width: 20px; height: 2px; }
-  #hint { bottom: 2px; left: 50%; transform: translateX(-50%); font-size: 13px; color: rgba(255,255,255,0.6); background: none; white-space: nowrap; }
+  #hint { bottom: 2px; left: 50%; transform: translateX(-50%); font-size: 11px; color: rgba(255,255,255,0.6); background: none; white-space: nowrap; }
   #vignette { position: fixed; inset: 0; background: rgba(200,30,30,0.35); opacity: 0; pointer-events: none; z-index: 6; }
   .overlay { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; z-index: 10; pointer-events: none; }
   #title-screen { background: rgba(8,12,20,0.55); color: #fff; }
@@ -152,7 +152,7 @@
     <div id="car-cond">KONDISI 100%</div>
     <div><span id="speed-num">0</span> <span id="speed-unit">KM/J</span></div>
   </div>
-  <div id="minimap-wrap" class="panel"><canvas id="minimap" width="170" height="170"></canvas><div id="district-label">Marina</div></div>
+  <div id="minimap-wrap" class="panel"><canvas id="minimap" width="120" height="120"></canvas><div id="district-label">Marina</div></div>
   <div id="crosshair" class="panel hidden"></div>
   <div id="hint" class="panel">WASD gerak · E masuk mobil · F curi · Klik tembak · R reload / radio (di mobil) · Shift NOS · M peta · N mute · Esc pause</div>
 </div>

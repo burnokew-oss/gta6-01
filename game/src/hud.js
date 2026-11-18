@@ -1,10 +1,8 @@
-// HUD DOM: cash/health/armor/Rep, bintang wanted, panel polisi bernama,
-// panel misi, jam + hari, radio + lagu, objektif, speedometer besar,
-// minimap bundar + nama distrik, dialog berpotret, panel toko,
-// title screen gradasi, dan peta kota penuh (M).
-//
-// Semua panel adalah elemen DOM di index.html — teksnya tajam di
-// screenshot dan mudah dibaca judge dalam sekali lirik.
+// HUD DOM (ronde 2 — dirampingkan): panel kecil-kecil di sudut, tengah
+// layar dibiarkan lega untuk kota. Isi tetap sama: cash/HP/armor/Rep,
+// bintang wanted, polisi bernama, panel misi, jam + hari, radio + lagu,
+// objektif, speedometer, minimap bundar + nama distrik, dialog
+// berpotret, panel toko, title gradasi, dan peta kota penuh (M).
 import { WEAPONS, SHELL_COUNT, WEEKDAYS, repTier } from './config.js';
 import { districtAt } from './city.js';
 import { SHOP_DEFS } from './shops.js';
@@ -16,8 +14,6 @@ export const SCREEN_OVER = 'over';
 export const SCREEN_MAP = 'map';
 
 const SPEAKER_COLORS = { 'Bu Sari': '#e8a020', Dimas: '#2e8a5b', Raka: '#2e6fb5', Nadia: '#8a5ec2' };
-
-const DISTRICT_COLORS = { Marina: '#c8a06a', 'Kota Tua': '#8a6a4a', CBD: '#5a6a9a', Perumahan: '#5a8a5a', Pelabuhan: '#9a6a4a' };
 const DISTRICT_NEON = { Marina: '#ffd23f', 'Kota Tua': '#ff8c5a', CBD: '#37c8e8', Perumahan: '#7dff8a', Pelabuhan: '#ff5e8a' };
 
 function $(id) { return document.getElementById(id); }
@@ -31,9 +27,9 @@ export function createHud() {
   function show(el, on) { el.classList.toggle('hidden', !on); }
 
   function drawMinimap(G) {
-    const S = 170;
+    const S = 120;
     const sc = S / 260;
-    const ox = 130; // dunia x -130..130 -> 0..260
+    const ox = 130;
     const c = mmCtx;
     c.clearRect(0, 0, S, S);
     c.save();
@@ -42,12 +38,10 @@ export function createHud() {
     c.clip();
     c.fillStyle = 'rgba(10,14,20,0.78)';
     c.fillRect(0, 0, S, S);
-    // Laut barat + pasir.
     c.fillStyle = '#3f8fbf';
     c.fillRect(0, 0, 8 * sc, S);
     c.fillStyle = '#e8d39a';
     c.fillRect(8 * sc, 0, 6 * sc, S);
-    // Jalan.
     c.strokeStyle = '#666';
     c.lineWidth = 1;
     for (const l of G.city.lines) {
@@ -55,12 +49,11 @@ export function createHud() {
       c.beginPath(); c.moveTo(p, 0); c.lineTo(p, S); c.stroke();
       c.beginPath(); c.moveTo(0, p); c.lineTo(S, p); c.stroke();
     }
-    // Bangunan.
     c.fillStyle = '#5a5f7a';
     for (const b of G.city.buildings) {
       c.fillRect((b.x - b.w / 2 + ox) * sc, (b.z - b.d / 2 + ox) * sc, Math.max(1, b.w * sc), Math.max(1, b.d * sc));
     }
-    // Lingkaran zona pencarian merah di sekitar pemain (radius 40 dunia).
+    // Lingkaran zona pencarian merah di sekitar pemain (radius 40).
     const zx = (G.player.x + ox) * sc;
     const zy = (G.player.z + ox) * sc;
     const zr = 40 * sc;
@@ -82,17 +75,16 @@ export function createHud() {
     const m = G.mission;
     if (m.started && m.index >= 0) {
       const step = (G.missionDefs[m.index] || {}).steps?.[m.step];
-      if (step && step.x !== undefined) dot(step.x, step.z, '#ffd23f', 5);
+      if (step && step.x !== undefined) dot(step.x, step.z, '#ffd23f', 4);
     }
-    if (m.taxi) dot(m.taxi.px, m.taxi.pz, '#ffd23f', 5);
+    if (m.taxi) dot(m.taxi.px, m.taxi.pz, '#ffd23f', 4);
     for (const v of G.vehicles) {
-      if (v.type === 'police') dot(v.x, v.z, '#3f7fff', 2.5);
-      else if (v === G.player.vehicle) dot(v.x, v.z, '#fff', 3);
+      if (v.type === 'police') dot(v.x, v.z, '#3f7fff', 2);
+      else if (v === G.player.vehicle) dot(v.x, v.z, '#fff', 2.5);
     }
-    for (const cp of G.cops) dot(cp.x, cp.z, '#3f7fff', 2);
-    for (const e of G.enemies) dot(e.x, e.z, '#ff4f4f', 2.5);
-    if (G.heli) dot(G.heli.x, G.heli.z, '#ff8c1a', 4);
-    // Pemain: panah putih searah hadap.
+    for (const cp of G.cops) dot(cp.x, cp.z, '#3f7fff', 1.8);
+    for (const e of G.enemies) dot(e.x, e.z, '#ff4f4f', 2);
+    if (G.heli) dot(G.heli.x, G.heli.z, '#ff8c1a', 3.5);
     const px = (G.player.x + ox) * sc;
     const py = (G.player.z + ox) * sc;
     c.save();
@@ -100,7 +92,7 @@ export function createHud() {
     c.rotate(Math.PI / 2 - G.player.angle);
     c.fillStyle = '#fff';
     c.beginPath();
-    c.moveTo(7, 0); c.lineTo(-5, -5); c.lineTo(-5, 5); c.closePath();
+    c.moveTo(6, 0); c.lineTo(-4, -4); c.lineTo(-4, 4); c.closePath();
     c.fill();
     c.restore();
     c.restore();
@@ -109,15 +101,13 @@ export function createHud() {
     c.beginPath();
     c.arc(S / 2, S / 2, S / 2, 0, Math.PI * 2);
     c.stroke();
-    // Label zona pencarian di dalam lingkaran minimap (atas, supaya
-    // tidak terpotong masker bundar CSS di tepi bawah).
-    c.font = 'bold 9px system-ui, sans-serif';
+    c.font = 'bold 7px system-ui, sans-serif';
     c.textAlign = 'center';
     c.lineWidth = 3;
     c.strokeStyle = 'rgba(0,0,0,0.85)';
-    c.strokeText('ZONA PENCARIAN', S / 2, 16);
+    c.strokeText('ZONA PENCARIAN', S / 2, 18);
     c.fillStyle = '#ff2d2d';
-    c.fillText('ZONA PENCARIAN', S / 2, 16);
+    c.fillText('ZONA PENCARIAN', S / 2, 18);
   }
 
   function drawMapCanvas(G) {
@@ -125,20 +115,17 @@ export function createHud() {
     const sc = ms / 260;
     const ox = 130;
     const c = mapCtx;
-    // Palet malam neon: dasar navy gelap, bukan hijau siang.
     c.fillStyle = '#0d1526';
     c.fillRect(0, 0, ms, ms);
     c.fillStyle = '#0a2038';
     c.fillRect(0, 0, 8 * sc, ms);
     c.fillStyle = '#16233d';
     c.fillRect(8 * sc, 0, 6 * sc, ms);
-    // Bangunan gelap per distrik (zona malam, bukan warna siang).
     const DISTRICT_DARK = { Marina: '#1a2a44', 'Kota Tua': '#2a2138', CBD: '#14263d', Perumahan: '#1c2f22', Pelabuhan: '#33222a' };
     for (const b of G.city.buildings) {
       c.fillStyle = DISTRICT_DARK[b.district] || `#${b.color.toString(16).padStart(6, '0')}`;
       c.fillRect((b.x - b.w / 2 + ox) * sc, (b.z - b.d / 2 + ox) * sc, Math.max(2, b.w * sc), Math.max(2, b.d * sc));
     }
-    // Jalan: garis neon cyan tipis bercahaya.
     c.strokeStyle = '#22d3ee';
     c.lineWidth = 3;
     c.shadowColor = '#22d3ee';
@@ -165,7 +152,6 @@ export function createHud() {
       c.fillText(d.n, (d.x + ox) * sc, (d.z + ox) * sc);
     }
     c.shadowBlur = 0;
-    // Label grid ala peta kota (A–F / 1–5).
     c.font = '12px system-ui, sans-serif';
     c.fillStyle = '#7fb5d8';
     'ABCDEF'.split('').forEach((ch, i) => c.fillText(ch, (i + 0.5) * (ms / 6), 14));
@@ -178,8 +164,8 @@ export function createHud() {
     }
     for (const s of SHOP_DEFS) mdot(s.x, s.z, '#7dff8a', 7);
     for (const s of G.shells || []) if (!s.taken) mdot(s.x, s.z, '#ffd23f', 2.5);
-    mdot(-10, 100, '#ff6b5e', 6); // rumah sakit
-    mdot(-10, -100, '#3f7fff', 6); // kantor polisi
+    mdot(-10, 100, '#ff6b5e', 6);
+    mdot(-10, -100, '#3f7fff', 6);
     if (G.heli) mdot(G.heli.x, G.heli.z, '#ff8c1a', 7);
     for (const v of G.vehicles) if (v.type === 'police') mdot(v.x, v.z, '#3f7fff', 3.5);
     for (const e of G.enemies) mdot(e.x, e.z, '#ff4f4f', 3.5);
@@ -188,7 +174,6 @@ export function createHud() {
       const step = (G.missionDefs[m.index] || {}).steps?.[m.step];
       if (step && step.x !== undefined) mdot(step.x, step.z, '#ffd23f', 9);
     }
-    // Rute GPS kuning menyala dari pemain ke objektif (mengikuti jalan).
     const target = (() => {
       if (m.taxi) return { x: m.taxi.px, z: m.taxi.pz };
       if (m.started && m.index >= 0) {
@@ -302,7 +287,6 @@ export function createHud() {
     }
     if (screen !== SCREEN_PLAY) return;
 
-    // --- layar play ---
     $('cash').textContent = `$${p.cash.toLocaleString('en-US')}`;
     $('hpbar').style.width = `${Math.max(0, p.health)}%`;
     $('hpnum').textContent = Math.round(p.health);
@@ -311,7 +295,6 @@ export function createHud() {
     const w = WEAPONS[p.weapon];
     $('weapons-line').textContent = `1 Tinju · 2 Pistol ${p.ammoInMag.pistol}/${p.ammo.pistol} · 3 Shotgun ${p.ammoInMag.shotgun}/${p.ammo.shotgun}`;
     $('rep-line').textContent = `${w.name}${p.reloadTimer > 0 ? '  (reload...)' : ''} · REP ${rep.index + 1} ${rep.name} (${G.rep || 0}${rep.next ? `/${rep.next.need}` : ''})`;
-    // Slot senjata ala rank 1 (kanan atas): 1 Tinju · 2 Pistol · 3 SG.
     const slots = [
       { key: '1', name: 'TINJU', ammo: '', on: p.weapon === 'fist' },
       { key: '2', name: 'PISTOL', ammo: `${p.ammoInMag.pistol}/${p.ammo.pistol}`, on: p.weapon === 'pistol' },
@@ -319,7 +302,6 @@ export function createHud() {
     ];
     $('weapon-slots').innerHTML = slots.map((s) => `<span class="${s.on ? 'on' : ''}">${s.key} ${s.name}${s.ammo ? ` ${s.ammo}` : ''}</span>`).join('');
 
-    // Panel misi.
     const m = G.mission;
     if (m.started && m.index >= 0) {
       const def = G.missionDefs[m.index];
@@ -333,7 +315,7 @@ export function createHud() {
       show($('mission-panel'), false);
     }
 
-    // Panel polisi bernama.
+    // Panel polisi: heli + 4 unit terdekat saja, supaya tetap ramping.
     if (G.wanted > 0) {
       const units = [];
       if (G.heli) units.push({ name: G.heli.name || 'GARUDA-1', status: 'SPOTLIGHT', dist: Math.round(Math.hypot(p.x - G.heli.x, p.z - G.heli.z)), heli: true });
@@ -343,17 +325,16 @@ export function createHud() {
       for (const c of G.cops) {
         if (!c.dead && c.name) units.push({ name: c.name, status: c.status || 'PENGEJARAN', dist: c.dist ?? 500 });
       }
-      const shown = units.slice(0, 5);
+      const shown = units.slice(0, 4);
       show($('police-panel'), true);
       $('police-panel').querySelector('.t').textContent = `POLISI TELUK CERAH — KODE ${G.wanted}`;
       $('police-units').innerHTML = shown.map((u) => (
         `<div class="u"><span class="nm" style="color:${u.heli ? '#ff8c1a' : '#fff'}">${u.name}</span><span class="st">${u.status}</span><span class="ds">${u.dist} m</span></div>`
-      )).join('') + (units.length > 5 ? `<div class="u"><span style="color:#aaa">+${units.length - 5} unit lain di zona pencarian</span></div>` : '');
+      )).join('') + (units.length > 4 ? `<div class="u"><span style="color:#aaa">+${units.length - 4} unit lain</span></div>` : '');
     } else {
       show($('police-panel'), false);
     }
 
-    // Kanan atas.
     $('stars').textContent = '★'.repeat(G.wanted) + '☆'.repeat(5 - G.wanted);
     let seen = false;
     for (const c of G.cops) if (Math.hypot(c.x - p.x, c.z - p.z) < 35) seen = true;
@@ -374,8 +355,8 @@ export function createHud() {
     show($('banner'), !!m.banner);
     if (m.banner) $('banner').textContent = m.banner;
 
-    // Dialog berpotret.
     const d = m.dialog;
+    show($('hint'), !(d && d.shown < d.text.length + 60));
     if (d && d.shown < d.text.length + 60) {
       show($('dialog'), true);
       const portrait = $('portrait');
@@ -387,10 +368,8 @@ export function createHud() {
       show($('dialog'), false);
     }
 
-    // Objektif.
     $('objective').textContent = m.objective || '';
 
-    // Panel toko.
     if (G.shop) {
       const s = G.shop;
       show($('shop-panel'), true);
@@ -404,11 +383,9 @@ export function createHud() {
       show($('shop-panel'), false);
     }
 
-    // Toast radio.
     show($('radio-toast'), !!(G.radioToast && G.radioToast.timer > 0));
     if (G.radioToast && G.radioToast.timer > 0) $('radio-toast').textContent = `♪ Radio: ${G.radioToast.text}`;
 
-    // Speedometer + NOS.
     if (!p.onFoot && p.vehicle) {
       show($('speed-box'), true);
       const v = p.vehicle;

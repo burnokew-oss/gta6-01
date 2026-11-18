@@ -1,11 +1,12 @@
-// Renderer 3D (Three.js r149 vendored): langit senja shader, kota
-// InstancedMesh, kendaraan + karakter sebagai grup box, helikopter +
-// kerucut spotlight, tracer peluru, partikel, marker misi, dan kamera
-// chase dengan lag.
+// Renderer 3D Teluk Cerah — ronde 2 (malam hujan neon).
+// Tampilan yang dikejar: aspal basah seperti cermin (pantulan neon
+// memanjang), mobil sport merah mengkilap berlekuk, deret toko neon
+// padat kiri-kanan, palem berdaun lebat, dan skyline kota berlampu di
+// kejauhan. Semua art prosedural, tanpa aset eksternal; Three.js r149
+// ter-vendor di game/vendor/.
 //
-// Semua art prosedural — tidak ada aset eksternal. Bila WebGL tidak
-// tersedia, renderer menandai webglOK=false dan main.js menampilkan
-// pesan fallback (bukan layar hitam).
+// Bila WebGL tidak tersedia, webglOK=false dan main.js menampilkan
+// pesan fallback, bukan layar hitam.
 import { CITY_HALF, ROAD_LINES, ROAD_WIDTH, KMH_PER_UNIT } from './config.js';
 import { SHOP_DEFS } from './shops.js';
 
@@ -21,30 +22,46 @@ export function createRenderer(canvas) {
     webglOK = false;
   }
 
-  // ---- scene, kamera, cahaya ----
+  // ---------- scene, kamera, cahaya ----------
   const scene = webglOK ? new THREE.Scene() : null;
-  const camera = webglOK ? new THREE.PerspectiveCamera(65, 1, 0.1, 1500) : null;
-  const ambient = webglOK ? new THREE.AmbientLight(0x8a7aa8, 0.85) : null;
-  const sun = webglOK ? new THREE.DirectionalLight(0xffb070, 1.15) : null;
-  const fill = webglOK ? new THREE.DirectionalLight(0xffd9b0, 0.5) : null;
+  const camera = webglOK ? new THREE.PerspectiveCamera(58, 1, 0.1, 1600) : null;
+  const ambient = webglOK ? new THREE.AmbientLight(0x7078a8, 0.62) : null;
+  const moon = webglOK ? new THREE.DirectionalLight(0x9fb4ff, 0.42) : null;
+  const warmFill = webglOK ? new THREE.DirectionalLight(0xff9a6a, 0.32) : null;
   if (webglOK) {
     scene.add(ambient);
-    sun.position.set(-40, 30, -75);
-    scene.add(sun);
-    // Fill dari timur: sisi mobil yang membelakangi matahari senja
-    // tetap terbaca (mobil hero merah tidak jadi siluet hitam).
-    fill.position.set(80, 50, 40);
-    scene.add(fill);
-    scene.fog = new THREE.Fog(0x3b2a4d, 90, 420);
+    moon.position.set(40, 90, -50);
+    scene.add(moon);
+    warmFill.position.set(-60, 40, 60);
+    scene.add(warmFill);
+    scene.fog = new THREE.Fog(0x0b0e1a, 55, 300);
+    // Lampu neon titik di koridor chase (z=12): pantulan specular di
+    // aspal + cahaya warna-warni di fasad. Sedikit titik, jarak pendek,
+    // supaya SwiftShader tetap jalan.
+    const neonSpots = [
+      { x: -28, c: 0xff2d78 }, { x: -12, c: 0x00e5ff }, { x: 4, c: 0xff6a00 },
+      { x: 20, c: 0xff2d78 }, { x: 36, c: 0x39ff6a }, { x: 52, c: 0x00e5ff },
+      { x: 68, c: 0xffe14d }, { x: -44, c: 0xc26aff },
+    ];
+    for (const s of neonSpots) {
+      const pl = new THREE.PointLight(s.c, 1.35, 34, 2);
+      pl.position.set(s.x, 4.5, 12);
+      scene.add(pl);
+    }
+    // Lampu pengikut pemain: mengangkat cat mobil hero dari gelap.
+    const heroLight = new THREE.PointLight(0xfff2dd, 0.3, 20, 2);
+    heroLight.position.set(0, 6, 0);
+    scene.add(heroLight);
+    scene.userData.heroLight = heroLight;
   }
 
-  // ---- langit: kubah shader gradien + piringan matahari ----
+  // ---------- langit malam: kubah gradien + bintang + bulan + skyline ----------
   const skyUniforms = webglOK ? {
-    uTop: { value: new THREE.Color(0x2a338c) },
-    uMid: { value: new THREE.Color(0xf28c59) },
-    uBot: { value: new THREE.Color(0x8c4d4d) },
-    uSunDir: { value: new THREE.Vector3(-0.35, 0.3, -0.75).normalize() },
-    uSunAmt: { value: 0.85 },
+    uTop: { value: new THREE.Color(0x05060f) },
+    uMid: { value: new THREE.Color(0x131a3a) },
+    uBot: { value: new THREE.Color(0x2a1638) },
+    uSunDir: { value: new THREE.Vector3(0.3, 0.6, -0.4).normalize() },
+    uSunAmt: { value: 0.25 },
   } : null;
   if (webglOK) {
     const skyMat = new THREE.ShaderMaterial({
@@ -55,17 +72,81 @@ export function createRenderer(canvas) {
         + ' void main(){ float h=vDir.y*0.5+0.5;'
         + ' vec3 col = h>0.55 ? mix(uMid,uTop,(h-0.55)/0.45) : mix(uBot,uMid,h/0.55);'
         + ' float s=max(dot(normalize(vDir),normalize(uSunDir)),0.0);'
-        + ' col+=vec3(1.0,0.75,0.35)*pow(s,350.0)*2.5*uSunAmt;'
-        + ' col+=vec3(1.0,0.45,0.12)*pow(s,6.0)*0.50*uSunAmt;'
+        + ' col+=vec3(0.9,0.95,1.0)*pow(s,400.0)*1.6*uSunAmt;'
+        + ' col+=vec3(0.35,0.2,0.45)*pow(s,5.0)*0.35;'
         + ' gl_FragColor=vec4(col,1.0); }',
     });
-    scene.add(new THREE.Mesh(new THREE.SphereGeometry(800, 24, 16), skyMat));
+    scene.add(new THREE.Mesh(new THREE.SphereGeometry(760, 24, 16), skyMat));
+    // Bintang: titik-titik putih di kubah.
+    let rs = 987654321;
+    const srnd = () => { rs = (rs * 1664525 + 1013904223) >>> 0; return rs / 4294967296; };
+    const starCount = 420;
+    const starPos = new Float32Array(starCount * 3);
+    for (let i = 0; i < starCount; i += 1) {
+      const a = srnd() * Math.PI * 2;
+      const e = 0.12 + srnd() * 1.2;
+      const r = 720;
+      starPos[i * 3] = Math.cos(a) * Math.cos(e) * r;
+      starPos[i * 3 + 1] = Math.sin(e) * r;
+      starPos[i * 3 + 2] = Math.sin(a) * Math.cos(e) * r;
+    }
+    const starGeo = new THREE.BufferGeometry();
+    starGeo.setAttribute('position', new THREE.BufferAttribute(starPos, 3));
+    const stars = new THREE.Points(starGeo, new THREE.PointsMaterial({ color: 0xdfe8ff, size: 1.7, sizeAttenuation: false, transparent: true, opacity: 0.75, fog: false }));
+    scene.add(stars);
+    // Skyline jauh: panorama siluet gedung + jendela menyala, digambar
+    // sekali ke canvas lalu dililitkan ke silinder raksasa. Memberi
+    // kedalaman kota di titik hilang jalan, tanpa ratusan mesh.
+    const sc = document.createElement('canvas');
+    sc.width = 2048;
+    sc.height = 256;
+    const sctx = sc.getContext('2d');
+    const grad = sctx.createLinearGradient(0, 0, 0, 256);
+    grad.addColorStop(0, '#070a18');
+    grad.addColorStop(1, '#1a1030');
+    sctx.fillStyle = grad;
+    sctx.fillRect(0, 0, 2048, 256);
+    let bx = 0;
+    while (bx < 2048) {
+      const bw = 26 + srnd() * 70;
+      const bh = 60 + srnd() * 150;
+      sctx.fillStyle = '#04050c';
+      sctx.fillRect(bx, 256 - bh, bw, bh);
+      // Antena + lampu merah di beberapa menara.
+      if (srnd() < 0.3) {
+        sctx.fillStyle = '#04050c';
+        sctx.fillRect(bx + bw / 2 - 2, 256 - bh - 26, 4, 26);
+        sctx.fillStyle = '#ff2d2d';
+        sctx.beginPath();
+        sctx.arc(bx + bw / 2, 256 - bh - 28, 3, 0, Math.PI * 2);
+        sctx.fill();
+      }
+      // Jendela menyala acak di siluet.
+      for (let wy = 256 - bh + 8; wy < 248; wy += 11) {
+        for (let wx = bx + 5; wx < bx + bw - 4; wx += 9) {
+          if (srnd() < 0.42) {
+            const warm = srnd() < 0.62;
+            sctx.fillStyle = warm ? 'rgba(255,196,90,0.95)' : (srnd() < 0.5 ? 'rgba(110,225,255,0.9)' : 'rgba(255,120,190,0.85)');
+            sctx.fillRect(wx, wy, 3.5, 5);
+          }
+        }
+      }
+      bx += bw + 2 + srnd() * 14;
+    }
+    const skyTex = new THREE.CanvasTexture(sc);
+    skyTex.anisotropy = 4;
+    const skyline = new THREE.Mesh(
+      new THREE.CylinderGeometry(470, 470, 150, 48, 1, true),
+      new THREE.MeshBasicMaterial({ map: skyTex, side: THREE.BackSide, fog: false }),
+    );
+    skyline.position.y = 62;
+    scene.add(skyline);
   }
 
-  // ---- material + geometri bersama ----
+  // ---------- material + geometri bersama ----------
   const boxGeo = webglOK ? new THREE.BoxGeometry(1, 1, 1) : null;
   const planeGeo = webglOK ? new THREE.PlaneGeometry(1, 1) : null;
-  const sphereGeo = webglOK ? new THREE.SphereGeometry(0.35, 8, 6) : null;
+  const sphereGeo = webglOK ? new THREE.SphereGeometry(0.35, 10, 8) : null;
   const coneGeo = webglOK ? new THREE.ConeGeometry(1, 1, 8) : null;
   const lambertCache = new Map();
   function lambert(hex) {
@@ -77,6 +158,11 @@ export function createRenderer(canvas) {
     if (!basicCache.has(hex)) basicCache.set(hex, new THREE.MeshBasicMaterial({ color: hex }));
     return basicCache.get(hex);
   }
+  // Cat glossy: Phong dengan specular putih kuat — kilau lampu neon
+  // di bodi mobil tanpa butuh environment map.
+  function gloss(hex, shine) {
+    return new THREE.MeshPhongMaterial({ color: hex, shininess: shine || 120, specular: 0x777788 });
+  }
   const dummy = webglOK ? new THREE.Object3D() : null;
 
   function putBox(parent, x, y, z, sx, sy, sz, mat) {
@@ -86,31 +172,99 @@ export function createRenderer(canvas) {
     parent.add(m);
     return m;
   }
+  // Tekstur gradien memanjang (putih -> transparan di kedua ujung):
+  // dipakai semua pantulan basah, tintanya dari warna material.
+  let streakTex = null;
+  function getStreakTex() {
+    if (streakTex) return streakTex;
+    const c = document.createElement('canvas');
+    c.width = 256;
+    c.height = 32;
+    const ctx = c.getContext('2d');
+    const g = ctx.createLinearGradient(0, 0, 256, 0);
+    g.addColorStop(0, 'rgba(255,255,255,0)');
+    g.addColorStop(0.18, 'rgba(255,255,255,0.85)');
+    g.addColorStop(0.82, 'rgba(255,255,255,0.85)');
+    g.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, 256, 32);
+    const gv = ctx.createLinearGradient(0, 0, 0, 32);
+    gv.addColorStop(0, 'rgba(0,0,0,1)');
+    gv.addColorStop(0.5, 'rgba(0,0,0,0)');
+    gv.addColorStop(1, 'rgba(0,0,0,1)');
+    ctx.globalCompositeOperation = 'destination-out';
+    ctx.fillStyle = gv;
+    ctx.fillRect(0, 0, 256, 32);
+    streakTex = new THREE.CanvasTexture(c);
+    return streakTex;
+  }
+  // Tekstur kilau radial (putih -> transparan): glow lampu, sorot, bulan.
+  let glowTex = null;
+  function getGlowTex() {
+    if (glowTex) return glowTex;
+    const c = document.createElement('canvas');
+    c.width = 128;
+    c.height = 128;
+    const ctx = c.getContext('2d');
+    const g = ctx.createRadialGradient(64, 64, 2, 64, 64, 62);
+    g.addColorStop(0, 'rgba(255,255,255,1)');
+    g.addColorStop(0.35, 'rgba(255,255,255,0.55)');
+    g.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, 128, 128);
+    glowTex = new THREE.CanvasTexture(c);
+    return glowTex;
+  }
+  function glowSprite(color, scale) {
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: getGlowTex(), color, transparent: true, opacity: 0.9,
+      blending: THREE.AdditiveBlending, depthWrite: false,
+    }));
+    sp.scale.set(scale, scale, 1);
+    return sp;
+  }
+  // Satu coretan pantulan basah di aspal: bidang datar additif,
+  // memanjang searah jalan, warna neon.
+  function wetStreak(parent, x, z, len, wid, color, opacity, alongX) {
+    const m = new THREE.Mesh(planeGeo, new THREE.MeshBasicMaterial({
+      map: getStreakTex(), color, transparent: true, opacity,
+      blending: THREE.AdditiveBlending, depthWrite: false,
+    }));
+    m.rotation.x = -Math.PI / 2;
+    m.rotation.z = alongX ? 0 : Math.PI / 2;
+    m.scale.set(len, wid, 1);
+    m.position.set(x, 0.07, z);
+    parent.add(m);
+    return m;
+  }
 
-  // ---- tanah, pasir, laut ----
+  // ---------- tanah, laut, jalan basah ----------
   if (webglOK) {
-    putBox(scene, 9, -0.5, 0, 242, 1, 260, lambert(0x557a45)); // rumput
-    putBox(scene, -117, -0.45, 0, 10, 0.9, 260, lambert(0xd8c08a)); // pantai
-    const sea = new THREE.Mesh(new THREE.PlaneGeometry(300, 500), lambert(0x2a6a9a));
+    putBox(scene, 9, -0.5, 0, 242, 1, 260, lambert(0x2e4a26)); // daratan gelap
+    putBox(scene, -117, -0.45, 0, 10, 0.9, 260, lambert(0x8a7a55)); // pantai malam
+    const sea = new THREE.Mesh(
+      new THREE.PlaneGeometry(300, 500),
+      new THREE.MeshPhongMaterial({ color: 0x0d2a44, shininess: 160, specular: 0x5577aa }),
+    );
     sea.rotation.x = -Math.PI / 2;
     sea.position.set(-270, -0.3, 0);
     scene.add(sea);
-    // Dermaga timur (pelabuhan).
-    putBox(scene, 128, 0.2, 40, 26, 0.8, 30, lambert(0x73614e));
+    putBox(scene, 128, 0.2, 40, 26, 0.8, 30, lambert(0x4a3d2e)); // dermaga
   }
 
-  // ---- jalan + trotoar + marka ----
-  let roadMesh = null;
-  let dashMesh = null;
+  // Jalan: aspal hampir hitam, Phong sangat mengkilap — specular dari
+  // lampu neon titik + bulan membentuk kilau basah di permukaan.
   if (webglOK) {
     const roadSpots = [];
     for (const g of ROAD_LINES) {
       roadSpots.push([g, 0, 0, ROAD_WIDTH, 0.12, WORLD + 20]);
       roadSpots.push([0, 0, g, WORLD + 20, 0.12, ROAD_WIDTH]);
     }
-    // Jalan basah: Phong berkilau supaya lampu neon + lampu jalan
-    // memantul di aspal (gaya malam-hujan referensi).
-    roadMesh = new THREE.InstancedMesh(boxGeo, new THREE.MeshPhongMaterial({ color: 0x15151d, shininess: 140, specular: 0x8a8a9a }), roadSpots.length);
+    const roadMesh = new THREE.InstancedMesh(
+      boxGeo,
+      new THREE.MeshPhongMaterial({ color: 0x0b0b11, shininess: 200, specular: 0x707688 }),
+      roadSpots.length,
+    );
     roadSpots.forEach((r, i) => {
       dummy.position.set(r[0], r[1], r[2]);
       dummy.scale.set(r[3], r[4], r[5]);
@@ -124,7 +278,7 @@ export function createRenderer(canvas) {
       sideSpots.push([g, 0, 0, ROAD_WIDTH + 8, 0.08, WORLD + 20]);
       sideSpots.push([0, 0, g, WORLD + 20, 0.08, ROAD_WIDTH + 8]);
     }
-    const sideMesh = new THREE.InstancedMesh(boxGeo, lambert(0x9a9a92), sideSpots.length);
+    const sideMesh = new THREE.InstancedMesh(boxGeo, lambert(0x3d3d42), sideSpots.length);
     sideSpots.forEach((r, i) => {
       dummy.position.set(r[0], r[1], r[2]);
       dummy.scale.set(r[3], r[4], r[5]);
@@ -136,11 +290,11 @@ export function createRenderer(canvas) {
     const dashes = [];
     for (const g of ROAD_LINES) {
       for (let t = -CITY_HALF; t <= CITY_HALF; t += 8) {
-        dashes.push({ x: g, z: t, w: 0.35, d: 4, vertical: true });
-        dashes.push({ x: t, z: g, w: 4, d: 0.35, vertical: false });
+        dashes.push({ x: g, z: t, w: 0.35, d: 4 });
+        dashes.push({ x: t, z: g, w: 4, d: 0.35 });
       }
     }
-    dashMesh = new THREE.InstancedMesh(planeGeo, basic(0xd8d0a0), dashes.length);
+    const dashMesh = new THREE.InstancedMesh(planeGeo, basic(0xc8c098), dashes.length);
     dashes.forEach((d, i) => {
       dummy.position.set(d.x, 0.08, d.z);
       dummy.rotation.set(-Math.PI / 2, 0, 0);
@@ -149,9 +303,32 @@ export function createRenderer(canvas) {
       dashMesh.setMatrixAt(i, dummy.matrix);
     });
     scene.add(dashMesh);
+    // Cermin neon generik di koridor chase (z=12) + pelabuhan (z=100):
+    // coretan pink/cyan/oranye memanjang searah jalan, rapat, supaya
+    // aspal terbaca basah bahkan sebelum satu sign pun terlihat.
+    const streakCols = [0xff2d78, 0x00e5ff, 0xff6a00, 0xffe14d, 0x39ff6a, 0xc26aff];
+    for (let x = -52; x <= 92; x += 7) {
+      const c = streakCols[Math.abs(x / 7) % streakCols.length];
+      wetStreak(scene, x + ((x % 14 === 0) ? 0 : 2), 12 + (x % 3) - 1, 13 + (x % 5), 1.5 + (x % 3) * 0.5, c, 0.62, true);
+    }
+    for (let x = 30; x <= 108; x += 9) {
+      const c = streakCols[(x / 9) % streakCols.length];
+      wetStreak(scene, x, 100 + (x % 2), 12, 1.1, c, 0.3, true);
+    }
+    // Genangan: elips mengkilap tersebar di jalan (Phong specular tinggi).
+    const puddleGeo = new THREE.CircleGeometry(1, 20);
+    const puddleMat = new THREE.MeshPhongMaterial({ color: 0x1a2030, shininess: 300, specular: 0xffffff, transparent: true, opacity: 0.85 });
+    const puddles = [[48, 12, 3.2], [66, 12, 2.4], [30, 12, 2.8], [84, 100, 3.0], [12, -32, 2.2], [-20, 12, 2.6], [58, 56, 2.4]];
+    for (const [px, pz, pr] of puddles) {
+      const pd = new THREE.Mesh(puddleGeo, puddleMat);
+      pd.rotation.x = -Math.PI / 2;
+      pd.scale.set(pr, pr * 0.62, 1);
+      pd.position.set(px, 0.09, pz);
+      scene.add(pd);
+    }
   }
 
-  // ---- kota statis: gedung, jendela, palem, lampu, kontainer ----
+  // ---------- kota statis ----------
   let cityBuilt = false;
   let shellMesh = null;
   let shellList = null;
@@ -159,7 +336,7 @@ export function createRenderer(canvas) {
     if (cityBuilt) return;
     cityBuilt = true;
     const city = G.city;
-    // Gedung: satu InstancedMesh, warna per instance.
+    // Massa gedung: satu InstancedMesh, warna per instance.
     const bldg = new THREE.InstancedMesh(boxGeo, new THREE.MeshLambertMaterial({ color: 0xffffff }), city.buildings.length);
     const col = new THREE.Color();
     city.buildings.forEach((b, i) => {
@@ -169,24 +346,51 @@ export function createRenderer(canvas) {
       dummy.updateMatrix();
       bldg.setMatrixAt(i, dummy.matrix);
       bldg.setColorAt(i, col.setHex(b.color));
-      if (b.tall) putBox(scene, b.x, b.h + 2.5, b.z, 0.4, 5, 0.4, lambert(0x4d4d52));
     });
     scene.add(bldg);
-    // Jendela menyala: satu InstancedMesh bidang emissive.
+    // Lis atap (cornice): lempeng tipis sedikit lebih lebar di puncak
+    // tiap gedung — memecah siluet balok polos dari jauh.
+    const cornice = new THREE.InstancedMesh(boxGeo, new THREE.MeshLambertMaterial({ color: 0xffffff }), city.buildings.length);
+    city.buildings.forEach((b, i) => {
+      dummy.position.set(b.x, b.h + 0.25, b.z);
+      dummy.scale.set(b.w + 0.7, 0.5, b.d + 0.7);
+      dummy.rotation.set(0, 0, 0);
+      dummy.updateMatrix();
+      cornice.setMatrixAt(i, dummy.matrix);
+      cornice.setColorAt(i, col.setHex(b.color).multiplyScalar(0.55));
+    });
+    scene.add(cornice);
+    // Tangki + antena di atap gedung tinggi: silinder, bukan kotak.
+    const tallRoofs = city.buildings.filter((b) => b.tall);
+    const tanks = new THREE.InstancedMesh(new THREE.CylinderGeometry(1.1, 1.1, 2.2, 10), lambert(0x3a3f4a), tallRoofs.length);
+    const aerials = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.09, 0.16, 6, 6), basic(0x222226), tallRoofs.length);
+    tallRoofs.forEach((b, i) => {
+      dummy.position.set(b.x - b.w / 4, b.h + 1.4, b.z);
+      dummy.scale.set(1, 1, 1);
+      dummy.rotation.set(0, 0, 0);
+      dummy.updateMatrix();
+      tanks.setMatrixAt(i, dummy.matrix);
+      dummy.position.set(b.x + b.w / 4, b.h + 3, b.z + b.d / 4);
+      dummy.updateMatrix();
+      aerials.setMatrixAt(i, dummy.matrix);
+    });
+    scene.add(tanks);
+    scene.add(aerials);
+    // Jendela menyala: rapat, hangat + dingin, di keempat fasad.
     const wins = [];
     for (const b of city.buildings) {
-      const cols = Math.max(2, Math.floor(b.w / 3.2));
-      const rows = Math.max(2, Math.floor(b.h / 3.4));
+      const cols = Math.max(2, Math.floor(b.w / 2.6));
+      const rows = Math.max(2, Math.floor(b.h / 2.9));
       for (let s = 0; s < 4; s += 1) {
         for (let cx = 0; cx < cols; cx += 1) {
           for (let ry = 0; ry < rows; ry += 1) {
-            if ((cx + ry + s) % 2 !== 0) continue;
+            if ((cx * 2 + ry + s) % 3 === 0) continue;
             const warm = ((cx * 7 + ry * 3 + s) % 4) !== 0;
-            const c = warm ? [1.0, 0.72, 0.28] : [0.65, 0.85, 1.0];
+            const c = warm ? [0.92, 0.62, 0.26] : [0.55, 0.78, 0.95];
             const fx = (cx + 0.5) / cols - 0.5;
-            const fy = 2.2 + ry * 3.4;
+            const fy = 2.0 + ry * 2.9;
             if (fy > b.h - 1) continue;
-            const off = 0.06;
+            const off = 0.07;
             if (s === 0) wins.push({ x: b.x + fx * b.w, y: fy, z: b.z + b.d / 2 + off, ry: 0, c });
             if (s === 1) wins.push({ x: b.x + fx * b.w, y: fy, z: b.z - b.d / 2 - off, ry: Math.PI, c });
             if (s === 2) wins.push({ x: b.x + b.w / 2 + off, y: fy, z: b.z + fx * b.d, ry: Math.PI / 2, c });
@@ -199,64 +403,87 @@ export function createRenderer(canvas) {
     wins.forEach((w, i) => {
       dummy.position.set(w.x, w.y, w.z);
       dummy.rotation.set(0, w.ry, 0);
-      dummy.scale.set(1.8, 1.6, 1);
+      dummy.scale.set(1.1, 1.1, 1);
       dummy.updateMatrix();
       winMesh.setMatrixAt(i, dummy.matrix);
       winMesh.setColorAt(i, col.setRGB(w.c[0], w.c[1], w.c[2]));
     });
     scene.add(winMesh);
-    // Neon sign: papan nama bercahaya di fasad gedung dekat jalan +
-    // pantulan warnanya di aspal basah (tekstur canvas prosedural,
-    // tanpa aset eksternal).
-    const NEON_TEXTS = ['KLUB', 'DISKO', 'WARUNG KOPI', 'ROOFTOP BAR', 'ARCADE 24/7', 'WARUNG', 'KAFE', 'HOTEL', 'BAR', 'SINEMA', 'PIZZA', 'KARAOKE', 'BILLIARD', 'TOKO 24 JAM'];
+    // Garis neon vertikal di sudut fasad gedung dekat jalan + etalase
+    // toko menyala di lantai dasar: fasad tidak lagi bidang datar.
+    const edgeStrips = [];
+    const shopGlows = [];
+    for (const b of city.buildings) {
+      const nearRoad = ROAD_LINES.some((ln) => Math.abs(b.z + b.d / 2 - ln) < 13 || Math.abs(b.z - b.d / 2 - ln) < 13 || Math.abs(b.x + b.w / 2 - ln) < 13 || Math.abs(b.x - b.w / 2 - ln) < 13);
+      if (!nearRoad) continue;
+      const c = [0xff2d78, 0x00e5ff, 0xffe14d, 0x39ff6a, 0xff6a00, 0xc26aff][(Math.abs(Math.round(b.x + b.z)) % 6)];
+      edgeStrips.push({ x: b.x + b.w / 2 + 0.08, y: b.h / 2, z: b.z + b.d / 2 + 0.08, ry: 0, h: b.h * 0.92, c });
+      edgeStrips.push({ x: b.x - b.w / 2 - 0.08, y: b.h / 2, z: b.z - b.d / 2 - 0.08, ry: Math.PI, h: b.h * 0.92, c });
+      shopGlows.push({ x: b.x, y: 1.7, z: b.z + b.d / 2 + 0.09, ry: 0, w: b.w * 0.8 });
+      shopGlows.push({ x: b.x, y: 1.7, z: b.z - b.d / 2 - 0.09, ry: Math.PI, w: b.w * 0.8 });
+    }
+    const edgeMesh = new THREE.InstancedMesh(planeGeo, new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide }), edgeStrips.length);
+    edgeStrips.forEach((e, i) => {
+      dummy.position.set(e.x, e.y, e.z);
+      dummy.rotation.set(0, e.ry, 0);
+      dummy.scale.set(0.18, e.h, 1);
+      dummy.updateMatrix();
+      edgeMesh.setMatrixAt(i, dummy.matrix);
+      edgeMesh.setColorAt(i, col.setHex(e.c).multiplyScalar(0.7));
+    });
+    scene.add(edgeMesh);
+    const glowMesh = new THREE.InstancedMesh(planeGeo, new THREE.MeshBasicMaterial({ color: 0xffb45e, transparent: true, opacity: 0.55, side: THREE.DoubleSide }), shopGlows.length);
+    shopGlows.forEach((e, i) => {
+      dummy.position.set(e.x, e.y, e.z);
+      dummy.rotation.set(0, e.ry, 0);
+      dummy.scale.set(e.w * 0.75, 2.0, 1);
+      dummy.updateMatrix();
+      glowMesh.setMatrixAt(i, dummy.matrix);
+    });
+    scene.add(glowMesh);
+    // Neon sign: nama-nama orisinal Teluk Cerah saja. Satu sign per
+    // gedung dekat jalan (bukan tiap ketiga), plus sign vertikal di
+    // gedung tinggi — jalanan padat cahaya seperti referensi.
+    const NEON_TEXTS = ['WARUNG KOPI', 'SINEMA', 'KARAOKE', 'BILLIARD', 'PIZZA', 'KAFE', 'HOTEL', 'BAR', 'TOKO 24 JAM', 'PASAR MALAM', 'RUMAH MAKAN', 'BAKSO', 'SATE', 'KOPI TELUK', 'DISKO', 'SALON', 'BENGKEL', 'FOTO STUDIO', 'LAUNDRY', 'WARUNG'];
     const NEON_COLORS = ['#ff2d78', '#00e5ff', '#ffe14d', '#39ff6a', '#ff6a00', '#c26aff', '#ff3b30'];
     const neonTexCache = new Map();
-    function neonTexture(text, color) {
-      const key = `${text}|${color}`;
+    function neonTexture(text, color, vertical) {
+      const key = `${text}|${color}|${vertical ? 'v' : 'h'}`;
       if (neonTexCache.has(key)) return neonTexCache.get(key);
       const c = document.createElement('canvas');
-      c.width = 512;
-      c.height = 128;
+      c.width = vertical ? 128 : 512;
+      c.height = vertical ? 512 : 128;
       const ctx = c.getContext('2d');
-      ctx.clearRect(0, 0, 512, 128);
-      ctx.font = '900 58px Arial, sans-serif';
+      ctx.clearRect(0, 0, c.width, c.height);
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.shadowColor = color;
       ctx.shadowBlur = 26;
       ctx.strokeStyle = color;
       ctx.lineWidth = 6;
-      ctx.strokeText(text, 256, 66);
       ctx.fillStyle = '#ffffff';
-      ctx.shadowBlur = 12;
-      ctx.fillText(text, 256, 66);
+      if (vertical) {
+        ctx.font = '900 54px Arial, sans-serif';
+        ctx.save();
+        ctx.translate(64, 256);
+        ctx.rotate(-Math.PI / 2);
+        ctx.strokeText(text, 0, 0);
+        ctx.shadowBlur = 12;
+        ctx.fillText(text, 0, 0);
+        ctx.restore();
+      } else {
+        const size = text.length > 9 ? 46 : 58;
+        ctx.font = `900 ${size}px Arial, sans-serif`;
+        ctx.strokeText(text, 256, 66);
+        ctx.shadowBlur = 12;
+        ctx.fillText(text, 256, 66);
+      }
       const tex = new THREE.CanvasTexture(c);
       tex.anisotropy = 4;
       neonTexCache.set(key, tex);
       return tex;
     }
-    const signed = new Set();
-    function placeSign(b, bi, f) {
-      if (signed.has(b)) return;
-      signed.add(b);
-      const text = NEON_TEXTS[bi % NEON_TEXTS.length];
-      const color = NEON_COLORS[(bi + 3) % NEON_COLORS.length];
-      const w = Math.min(12, b.w * 0.95);
-      const sign = new THREE.Mesh(planeGeo, new THREE.MeshBasicMaterial({ map: neonTexture(text, color), transparent: true, side: THREE.DoubleSide }));
-      sign.scale.set(w, w / 3, 1);
-      sign.position.set(f.px, Math.min(4.5, b.h * 0.45), f.pz);
-      sign.rotation.y = f.ry;
-      scene.add(sign);
-      // Pantulan neon di aspal basah (kotak tipis additif, mencapai jalan).
-      const sx = f.nz !== 0 ? w * 0.9 : 13;
-      const sz = f.nz !== 0 ? 13 : w * 0.9;
-      const reach = (f.gap || 0) * 0.5 + 1.5;
-      putBox(scene, f.px + f.nx * reach, 0.09, f.pz + f.nz * reach, sx, 0.05, sz,
-        new THREE.MeshBasicMaterial({ color: new THREE.Color(color), transparent: true, opacity: 0.45, blending: THREE.AdditiveBlending, depthWrite: false }));
-    }
-    city.buildings.forEach((b, bi) => {
-      if (b.h < 6 || bi % 3 !== 0) return;
-      // Fasad terdekat ke garis jalan (sisi mana pun).
+    function nearestFace(b) {
       const faces = [
         { gap: Math.min(...ROAD_LINES.map((ln) => Math.abs(b.z + b.d / 2 - ln))), ry: 0, nx: 0, nz: 1, px: b.x, pz: b.z + b.d / 2 + 0.15 },
         { gap: Math.min(...ROAD_LINES.map((ln) => Math.abs(b.z - b.d / 2 - ln))), ry: Math.PI, nx: 0, nz: -1, px: b.x, pz: b.z - b.d / 2 - 0.15 },
@@ -264,32 +491,36 @@ export function createRenderer(canvas) {
         { gap: Math.min(...ROAD_LINES.map((ln) => Math.abs(b.x - b.w / 2 - ln))), ry: -Math.PI / 2, nx: -1, nz: 0, px: b.x - b.w / 2 - 0.15, pz: b.z },
       ];
       faces.sort((a, c2) => a.gap - c2.gap);
-      const f = faces[0];
-      if (f.gap > 12) return;
-      placeSign(b, bi, f);
-    });
-    // Koridor neon: jalan yang ramai (z=12 CBD + z=100 pelabuhan) wajib
-    // punya neon di kedua sisi, supaya frame chase DAN shootout selalu
-    // punya papan neon di dalam frame.
-    function neonCorridor(roadZ, x0, x1) {
-      city.buildings.forEach((b, bi) => {
-        if (b.h < 6 || b.x < x0 || b.x > x1) return;
-        const faces = [
-          { gap: Math.min(Math.abs(b.z + b.d / 2 - roadZ), Math.min(...ROAD_LINES.map((ln) => Math.abs(b.z + b.d / 2 - ln)))), ry: 0, nx: 0, nz: 1, px: b.x, pz: b.z + b.d / 2 + 0.15 },
-          { gap: Math.min(Math.abs(b.z - b.d / 2 - roadZ), Math.min(...ROAD_LINES.map((ln) => Math.abs(b.z - b.d / 2 - ln)))), ry: Math.PI, nx: 0, nz: -1, px: b.x, pz: b.z - b.d / 2 - 0.15 },
-          { gap: Math.min(...ROAD_LINES.map((ln) => Math.abs(b.x + b.w / 2 - ln))), ry: Math.PI / 2, nx: 1, nz: 0, px: b.x + b.w / 2 + 0.15, pz: b.z },
-          { gap: Math.min(...ROAD_LINES.map((ln) => Math.abs(b.x - b.w / 2 - ln))), ry: -Math.PI / 2, nx: -1, nz: 0, px: b.x - b.w / 2 - 0.15, pz: b.z },
-        ];
-        faces.sort((a, c2) => a.gap - c2.gap);
-        const f = faces[0];
-        if (f.gap > 16) return;
-        placeSign(b, bi + 5, f);
-      });
+      return faces[0];
     }
-    neonCorridor(12, -40, 110);
-    neonCorridor(100, 40, 110);
-    // Billboard raksasa "TELUK FM" di koridor chase: papan pink menghadap
-    // kamera (timur), di selatan jalan z=12, di depan mobil hero.
+    city.buildings.forEach((b, bi) => {
+      if (b.h < 6) return;
+      const f = nearestFace(b);
+      if (f.gap > 13) return;
+      const text = NEON_TEXTS[bi % NEON_TEXTS.length];
+      const color = NEON_COLORS[(bi + 3) % NEON_COLORS.length];
+      const w = Math.min(11, b.w * 0.95);
+      const sign = new THREE.Mesh(planeGeo, new THREE.MeshBasicMaterial({ map: neonTexture(text, color, false), transparent: true, side: THREE.DoubleSide }));
+      sign.scale.set(w, w / 3.4, 1);
+      sign.position.set(f.px, Math.min(5.2, b.h * 0.5), f.pz);
+      sign.rotation.y = f.ry;
+      scene.add(sign);
+      // Pantulan sign di aspal: coretan memanjang searah jalan.
+      const alongX = f.nz !== 0;
+      const reach = f.gap * 0.5 + 1.5;
+      wetStreak(scene, f.px + f.nx * reach, f.pz + f.nz * reach, 10, 1.0, new THREE.Color(color).getHex(), 0.25, alongX);
+      // Sign vertikal di gedung tinggi.
+      if (b.tall && bi % 2 === 0) {
+        const vtext = NEON_TEXTS[(bi + 7) % NEON_TEXTS.length];
+        const vcolor = NEON_COLORS[(bi + 1) % NEON_COLORS.length];
+        const vsign = new THREE.Mesh(planeGeo, new THREE.MeshBasicMaterial({ map: neonTexture(vtext, vcolor, true), transparent: true, side: THREE.DoubleSide }));
+        vsign.scale.set(2.2, 9, 1);
+        vsign.position.set(f.px, Math.min(b.h - 5, 14), f.pz);
+        vsign.rotation.y = f.ry;
+        scene.add(vsign);
+      }
+    });
+    // Billboard "TELUK FM" di koridor chase, menghadap kamera.
     const bbCanvas = document.createElement('canvas');
     bbCanvas.width = 1024;
     bbCanvas.height = 384;
@@ -312,70 +543,91 @@ export function createRenderer(canvas) {
     bbTex.anisotropy = 4;
     const billboard = new THREE.Mesh(planeGeo, new THREE.MeshBasicMaterial({ map: bbTex, side: THREE.DoubleSide }));
     billboard.scale.set(14, 5.2, 1);
-    // Menghadap timur (ke kamera chase) — digeser ke barat + selatan supaya
-    // tidak menutupi titik hilang jalan (ala referensi: papan di sisi jalan).
     billboard.position.set(-20, 8, 26);
     billboard.rotation.y = Math.PI / 2;
     scene.add(billboard);
-    // Palem koridor: deret palem tinggi berbatang merah di tepi jalan
-    // z=12 (avenue ala referensi rank 1).
-    const corTrunkGeo = new THREE.CylinderGeometry(0.35, 0.5, 1, 6);
-    const corCrownGeo = new THREE.ConeGeometry(3, 3.6, 6);
-    const corSpots = [];
-    for (let i = 0; i < 10; i += 1) {
-      if (i === 2 || i === 4 || i === 6) continue; // palem selatan ini menutupi billboard TELUK FM — lewati
-      corSpots.push({ x: -30 + i * 10, z: 12 + (i % 2 === 0 ? 9.5 : -9.5), h: 9 + (i % 3) });
+    // Palem: batang melengkung (2 segmen silinder) + tajuk dari 7
+    // daun elips pipih yang terkulai — bukan kerucut hijau.
+    const trunkGeo = new THREE.CylinderGeometry(0.22, 0.42, 1, 7);
+    const frondGeo = new THREE.SphereGeometry(1, 8, 6);
+    const frondMat = new THREE.MeshLambertMaterial({ color: 0x1e7a2e });
+    const frondDark = new THREE.MeshLambertMaterial({ color: 0x14601f });
+    const allPalms = city.palms.slice();
+    for (let i = 0; i < 12; i += 1) {
+      allPalms.push({ x: -34 + i * 9, z: 12 + (i % 2 === 0 ? 10 : -10), h: 9 + (i % 3) });
     }
-    const corTrunks = new THREE.InstancedMesh(corTrunkGeo, lambert(0x7a2a20), corSpots.length);
-    const corCrowns = new THREE.InstancedMesh(corCrownGeo, lambert(0x1e8a2e), corSpots.length);
-    corSpots.forEach((pt, i) => {
-      dummy.position.set(pt.x, pt.h / 2, pt.z);
-      dummy.scale.set(1, pt.h, 1);
-      dummy.rotation.set(0, 0, 0);
+    const trunks = new THREE.InstancedMesh(trunkGeo, lambert(0x5a3a22), allPalms.length * 2);
+    const fronds = new THREE.InstancedMesh(frondGeo, frondMat, allPalms.length * 9);
+    const nuts = new THREE.InstancedMesh(sphereGeo, lambert(0x6a4a1a), allPalms.length * 3);
+    let ti = 0;
+    let fi = 0;
+    let ni = 0;
+    allPalms.forEach((p, pi) => {
+      const lean = (pi % 5 - 2) * 0.04;
+      dummy.position.set(p.x, p.h * 0.3, p.z);
+      dummy.scale.set(1, p.h * 0.6, 1);
+      dummy.rotation.set(lean, 0, lean);
       dummy.updateMatrix();
-      corTrunks.setMatrixAt(i, dummy.matrix);
-      dummy.position.set(pt.x, pt.h + 1.6, pt.z);
-      dummy.scale.set(1, 1, 1);
+      trunks.setMatrixAt(ti, dummy.matrix);
+      ti += 1;
+      dummy.position.set(p.x + lean * p.h * 0.6, p.h * 0.75, p.z + lean * p.h * 0.6);
+      dummy.scale.set(1, p.h * 0.55, 1);
+      dummy.rotation.set(lean * 2, 0, lean * 2);
       dummy.updateMatrix();
-      corCrowns.setMatrixAt(i, dummy.matrix);
-    });
-    scene.add(corTrunks);
-    scene.add(corCrowns);
-    // Palem: batang + tajuk, masing-masing satu InstancedMesh.
-    const trunkGeo = new THREE.CylinderGeometry(0.25, 0.35, 1, 6);
-    const crownGeo = new THREE.ConeGeometry(2.2, 2.6, 6);
-    const trunks = new THREE.InstancedMesh(trunkGeo, lambert(0x402914), city.palms.length);
-    const crowns = new THREE.InstancedMesh(crownGeo, lambert(0x14541a), city.palms.length);
-    city.palms.forEach((p, i) => {
-      dummy.position.set(p.x, p.h / 2, p.z);
-      dummy.scale.set(1, p.h, 1);
-      dummy.rotation.set(0, 0, 0);
-      dummy.updateMatrix();
-      trunks.setMatrixAt(i, dummy.matrix);
-      dummy.position.set(p.x, p.h + 1.2, p.z);
-      dummy.scale.set(1, 1, 1);
-      dummy.updateMatrix();
-      crowns.setMatrixAt(i, dummy.matrix);
+      trunks.setMatrixAt(ti, dummy.matrix);
+      ti += 1;
+      for (let f = 0; f < 9; f += 1) {
+        const a = (f / 9) * Math.PI * 2 + pi * 0.7;
+        dummy.position.set(
+          p.x + Math.cos(a) * 1.05,
+          p.h + 0.6 - (f % 3) * 0.35,
+          p.z + Math.sin(a) * 1.05,
+        );
+        dummy.rotation.set(Math.sin(a) * 1.1, 0, -Math.cos(a) * 1.1);
+        dummy.scale.set(1.5, 0.18, 0.42);
+        dummy.updateMatrix();
+        fronds.setMatrixAt(fi, dummy.matrix);
+        fi += 1;
+      }
+      for (let n = 0; n < 3; n += 1) {
+        dummy.position.set(p.x + (n - 1) * 0.3, p.h + 0.3, p.z + (n % 2) * 0.3);
+        dummy.scale.set(0.7, 0.7, 0.7);
+        dummy.rotation.set(0, 0, 0);
+        dummy.updateMatrix();
+        nuts.setMatrixAt(ni, dummy.matrix);
+        ni += 1;
+      }
     });
     scene.add(trunks);
-    scene.add(crowns);
-    // Lampu jalan: tiang + kepala menyala.
-    const poles = new THREE.InstancedMesh(boxGeo, lambert(0x1f1f24), city.lamps.length);
-    const heads = new THREE.InstancedMesh(boxGeo, basic(0xffd88a), city.lamps.length);
+    scene.add(fronds);
+    scene.add(nuts);
+    void frondDark;
+    // Lampu jalan: tiang silinder + lengan + kepala pijar + kolam
+    // cahaya hangat di aspal basah.
+    const poleGeo = new THREE.CylinderGeometry(0.14, 0.18, 5.4, 6);
+    const poles = new THREE.InstancedMesh(poleGeo, lambert(0x232328), city.lamps.length);
+    const heads = new THREE.InstancedMesh(sphereGeo, basic(0xffd88a), city.lamps.length);
     city.lamps.forEach((l, i) => {
-      dummy.position.set(l.x, 2.6, l.z);
-      dummy.scale.set(0.3, 5.2, 0.3);
+      dummy.position.set(l.x, 2.7, l.z);
+      dummy.scale.set(1, 1, 1);
       dummy.rotation.set(0, 0, 0);
       dummy.updateMatrix();
       poles.setMatrixAt(i, dummy.matrix);
-      dummy.position.set(l.x, 5.3, l.z);
-      dummy.scale.set(1.1, 0.35, 0.35);
+      dummy.position.set(l.x, 5.5, l.z);
+      dummy.scale.set(1.6, 1.1, 1.6);
       dummy.updateMatrix();
       heads.setMatrixAt(i, dummy.matrix);
+      const pool = new THREE.Mesh(
+        new THREE.CircleGeometry(2.6, 18),
+        new THREE.MeshBasicMaterial({ map: getGlowTex(), color: 0xffb45e, transparent: true, opacity: 0.3, blending: THREE.AdditiveBlending, depthWrite: false }),
+      );
+      pool.rotation.x = -Math.PI / 2;
+      pool.position.set(l.x, 0.08, l.z);
+      scene.add(pool);
     });
     scene.add(poles);
     scene.add(heads);
-    // Kontainer pelabuhan.
+    // Kontainer pelabuhan + garis tepi warna.
     const cont = new THREE.InstancedMesh(boxGeo, new THREE.MeshLambertMaterial({ color: 0xffffff }), city.containers.length);
     city.containers.forEach((c, i) => {
       dummy.position.set(c.x, c.h / 2, c.z);
@@ -392,44 +644,164 @@ export function createRenderer(canvas) {
     scene.add(shellMesh);
   }
 
-  // ---- kendaraan dinamis ----
+  // ---------- kendaraan: bodi kapsul membulat, cat glossy ----------
   const carGroups = new Map();
+  let polisiTex = null;
+  function getPolisiTex() {
+    if (polisiTex) return polisiTex;
+    const c = document.createElement('canvas');
+    c.width = 256;
+    c.height = 64;
+    const ctx = c.getContext('2d');
+    ctx.clearRect(0, 0, 256, 64);
+    ctx.font = '900 44px Arial, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#10203a';
+    ctx.fillText('POLISI', 128, 34);
+    polisiTex = new THREE.CanvasTexture(c);
+    return polisiTex;
+  }
+  function capsuleMesh(r, len, mat) {
+    return new THREE.Mesh(new THREE.CapsuleGeometry(r, len, 6, 14), mat);
+  }
   function buildCar(v) {
     const g = new THREE.Group();
-    const bodyMat = new THREE.MeshLambertMaterial({ color: v.color });
-    const body = putBox(g, 0, 0.55, 0, v.wid, 0.55, v.len, bodyMat);
-    g.userData.body = body;
-    g.userData.bodyMat = bodyMat;
-    g.userData.baseColor = v.color;
-    // Kabin: warna bodi digelapkan (bukan biru baja) — hero merah tetap merah.
-    const cabCol = new THREE.Color(v.color).multiplyScalar(0.65).getHex();
-    putBox(g, 0, 1.0, -0.3, v.wid - 0.4, 0.45, v.len * 0.42, lambert(cabCol)); // kabin
-    const wheelGeo = new THREE.CylinderGeometry(0.32, 0.32, 0.3, 10);
-    const wheelMat = lambert(0x0d0d0f);
-    for (const [wx, wz] of [[-0.85, 1.45], [0.85, 1.45], [-0.85, -1.45], [0.85, -1.45]]) {
-      const w = new THREE.Mesh(wheelGeo, wheelMat);
-      w.rotation.z = Math.PI / 2;
-      w.position.set((wx / 0.85) * (v.wid / 2 - 0.1), 0.32, (wz / 1.45) * (v.len / 2 - 0.6));
-      g.add(w);
+    const paint = gloss(v.color, v.type === 'sport' ? 240 : 190);
+    if (v.type === 'sport') { paint.color.setHex(0xe03030); paint.shininess = 170; }
+    g.userData.bodyMat = paint;
+    g.userData.baseColor = v.type === 'sport' ? 0xe03030 : v.color;
+    // Bodi bawah: kapsul tidur — sisi membulat, bukan balok.
+    const hull = capsuleMesh(0.5, Math.max(1.2, v.len - 1.5), paint);
+    hull.rotation.x = Math.PI / 2;
+    hull.scale.set(v.wid, 1, 0.72);
+    hull.position.y = 0.5;
+    g.add(hull);
+    // Ujung depan/belakang membulat.
+    const nose = new THREE.Mesh(sphereGeo, paint);
+    nose.scale.set(v.wid * 0.94, 0.42, 0.8);
+    nose.position.set(0, 0.52, v.len / 2 - 0.45);
+    g.add(nose);
+    const tail = new THREE.Mesh(sphereGeo, paint);
+    tail.scale.set(v.wid * 0.94, 0.42, 0.8);
+    tail.position.set(0, 0.52, -v.len / 2 + 0.45);
+    g.add(tail);
+    // Kabin kaca: setengah bola gelap mengkilap.
+    const glass = new THREE.MeshPhongMaterial({ color: 0x0a1220, shininess: 120, specular: 0x666677 });
+    const cabin = new THREE.Mesh(new THREE.SphereGeometry(1, 18, 12), glass);
+    cabin.scale.set(v.wid * 0.30, 0.22, v.len * 0.15);
+    cabin.position.set(0, 0.8, -0.3);
+    g.add(cabin);
+    // Atap: punggung merah tipis di atas kabin — kubah kaca terbelah
+    // jadi atap + kaca, bukan satu kubah gelap.
+    const roof = capsuleMesh(0.1, v.len * 0.12, paint);
+    roof.rotation.x = Math.PI / 2;
+    roof.scale.set(1.1, 1, 0.55);
+    roof.position.set(0, 1.0, -0.3);
+    g.add(roof);
+    // Ban: torus + pelek logam.
+    const tireGeo = new THREE.TorusGeometry(0.3, 0.11, 10, 18);
+    const tireMat = lambert(0x0c0c0e);
+    const rimGeo = new THREE.CylinderGeometry(0.2, 0.2, 0.14, 14);
+    const rimMat = new THREE.MeshPhongMaterial({ color: 0xc8ccd4, shininess: 220, specular: 0xffffff });
+    for (const [wx, wz] of [[-1, 1], [1, 1], [-1, -1], [1, -1]]) {
+      const tire = new THREE.Mesh(tireGeo, tireMat);
+      tire.rotation.y = Math.PI / 2;
+      tire.position.set(wx * (v.wid / 2 - 0.15), 0.32, wz * (v.len / 2 - 0.85));
+      g.add(tire);
+      const rim = new THREE.Mesh(rimGeo, rimMat);
+      rim.rotation.z = Math.PI / 2;
+      rim.position.copy(tire.position);
+      g.add(rim);
     }
-    putBox(g, 0, 0.62, v.len / 2 + 0.01, v.wid - 0.5, 0.18, 0.06, basic(0xfff299)); // lampu depan
-    putBox(g, 0, 0.62, -v.len / 2 - 0.01, v.wid - 0.5, 0.18, 0.06, basic(0xe61414)); // lampu belakang
+    // Bar lampu belakang merah memanjang + strip LED depan putih.
+    const tailBar = capsuleMesh(0.07, v.wid - 0.7, basic(0xff1a1a));
+    tailBar.rotation.z = Math.PI / 2;
+    tailBar.position.set(0, 0.78, -v.len / 2 - 0.02);
+    g.add(tailBar);
+    const tailGlow = glowSprite(0xff2d2d, 1.3);
+    tailGlow.position.set(0, 0.8, -v.len / 2 - 0.3);
+    g.add(tailGlow);
+    const headBar = capsuleMesh(0.05, v.wid - 0.8, basic(0xfff6d8));
+    headBar.rotation.z = Math.PI / 2;
+    headBar.position.set(0, 0.72, v.len / 2 + 0.02);
+    g.add(headBar);
+    for (const sx of [-1, 1]) {
+      const hg = glowSprite(0xffeebb, 0.9);
+      hg.position.set(sx * (v.wid / 2 - 0.3), 0.7, v.len / 2 + 0.4);
+      g.add(hg);
+    }
+    // Spion bulat kecil.
+    for (const sx of [-1, 1]) {
+      const mir = new THREE.Mesh(sphereGeo, paint);
+      mir.scale.set(0.22, 0.22, 0.22);
+      mir.position.set(sx * (v.wid / 2 - 0.02), 0.75, v.len * 0.1);
+      g.add(mir);
+    }
+    // Side skirt gelap di bawah pintu: garis bawah mobil tegas.
+    for (const sx of [-1, 1]) {
+      const skirt = capsuleMesh(0.06, v.len * 0.55, lambert(0x111114));
+      skirt.rotation.x = Math.PI / 2;
+      skirt.position.set(sx * (v.wid / 2 - 0.05), 0.3, 0);
+      g.add(skirt);
+    }
+    // Bayangan lembut di bawah mobil (bidang glow gelap-biru).
+    const pad = new THREE.Mesh(planeGeo, new THREE.MeshBasicMaterial({ map: getGlowTex(), color: 0x06060c, transparent: true, opacity: 0.55, depthWrite: false }));
+    pad.rotation.x = -Math.PI / 2;
+    pad.scale.set(v.len + 1.6, v.wid + 2.2, 1);
+    pad.position.y = 0.05;
+    g.add(pad);
     if (v.type === 'sport') {
-      // Spoiler GT: sayap belakang + dua penyangga.
-      putBox(g, 0, 1.22, -v.len / 2 + 0.3, v.wid - 0.3, 0.08, 0.6, lambert(0x111114));
-      putBox(g, -0.6, 1.0, -v.len / 2 + 0.3, 0.1, 0.3, 0.1, lambert(0x111114));
-      putBox(g, 0.6, 1.0, -v.len / 2 + 0.3, 0.1, 0.3, 0.1, lambert(0x111114));
+      // Spoiler GT: sayap kapsul pipih + 2 penyangga.
+      const wing = capsuleMesh(0.04, v.wid - 0.6, gloss(0x14141a, 160));
+      wing.rotation.z = Math.PI / 2;
+      wing.position.set(0, 0.98, -v.len / 2 + 0.3);
+      g.add(wing);
+      for (const sx of [-0.6, 0.6]) {
+        const strut = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.34, 8), lambert(0x14141a));
+        strut.position.set(sx, 0.9, -v.len / 2 + 0.3);
+        g.add(strut);
+      }
     }
     if (v.type === 'police') {
-      putBox(g, 0, 0.62, 0, v.wid + 0.02, 0.22, v.len * 0.55, lambert(0x0d0d14));
-      const barL = putBox(g, -0.35, 1.42, -0.3, 0.6, 0.22, 0.7, new THREE.MeshBasicMaterial({ color: 0xff1a1a }));
-      const barR = putBox(g, 0.35, 1.42, -0.3, 0.6, 0.22, 0.7, new THREE.MeshBasicMaterial({ color: 0x2244ff }));
+      // Pita hitam melingkari pintu + tulisan POLISI di sisi mobil.
+      const band = capsuleMesh(0.51, v.len * 0.42, lambert(0x0d0d14));
+      band.rotation.x = Math.PI / 2;
+      band.scale.set(v.wid * 1.01, 1, 0.94);
+      band.position.y = 0.56;
+      g.add(band);
+      for (const sx of [-1, 1]) {
+        const label = new THREE.Mesh(planeGeo, new THREE.MeshBasicMaterial({ map: getPolisiTex(), transparent: true, side: THREE.DoubleSide }));
+        label.scale.set(2.0, 0.5, 1);
+        label.position.set(sx * (v.wid / 2 + 0.06), 0.62, 0);
+        label.rotation.y = sx > 0 ? Math.PI / 2 : -Math.PI / 2;
+        g.add(label);
+      }
+      // Bar lampu merah-biru di atap + kilau menyala.
+      const barL = capsuleMesh(0.13, 0.55, new THREE.MeshBasicMaterial({ color: 0xff1a1a }));
+      barL.rotation.z = Math.PI / 2;
+      barL.position.set(-0.38, 1.34, -0.25);
+      g.add(barL);
+      const barR = capsuleMesh(0.13, 0.55, new THREE.MeshBasicMaterial({ color: 0x2244ff }));
+      barR.rotation.z = Math.PI / 2;
+      barR.position.set(0.38, 1.34, -0.25);
+      g.add(barR);
+      const glowL = glowSprite(0xff1a1a, 1.7);
+      glowL.position.set(-0.38, 1.5, -0.25);
+      g.add(glowL);
+      const glowR = glowSprite(0x2244ff, 1.7);
+      glowR.position.set(0.38, 1.5, -0.25);
+      g.add(glowR);
       g.userData.barL = barL;
       g.userData.barR = barR;
+      g.userData.glowL = glowL;
+      g.userData.glowR = glowR;
     }
     if (v.type === 'taxi') {
-      const sign = putBox(g, 0, 1.45, -0.3, 0.8, 0.25, 0.4, basic(0xf2c200));
-      g.userData.sign = sign;
+      const sign = capsuleMesh(0.12, 0.6, basic(0xf2c200));
+      sign.rotation.z = Math.PI / 2;
+      sign.position.set(0, 1.42, -0.25);
+      g.add(sign);
     }
     return g;
   }
@@ -443,7 +815,7 @@ export function createRenderer(canvas) {
         carGroups.set(v, g);
         scene.add(g);
       }
-      if (g.userData.baseColor !== v.color) {
+      if (g.userData.baseColor !== v.color && v.type !== 'sport') {
         g.userData.baseColor = v.color;
         g.userData.bodyMat.color.setHex(v.color);
       }
@@ -454,8 +826,12 @@ export function createRenderer(canvas) {
       else g.userData.bodyMat.color.setHex(g.userData.baseColor);
       if (g.userData.barL) {
         const phase = Math.floor(t * 4) % 2 === 0;
-        g.userData.barL.material.color.setHex(phase ? 0xff1a1a : 0x2244ff);
-        g.userData.barR.material.color.setHex(phase ? 0x2244ff : 0xff1a1a);
+        g.userData.barL.material.color.setHex(phase ? 0xff1a1a : 0x550000);
+        g.userData.barR.material.color.setHex(phase ? 0x000055 : 0x2244ff);
+        g.userData.glowL.material.opacity = phase ? 0.95 : 0.15;
+        g.userData.glowR.material.opacity = phase ? 0.15 : 0.95;
+        g.userData.glowL.scale.setScalar(phase ? 2.2 : 1.2);
+        g.userData.glowR.scale.setScalar(phase ? 1.2 : 2.2);
       }
     }
     for (const [v, g] of carGroups) {
@@ -466,14 +842,36 @@ export function createRenderer(canvas) {
     }
   }
 
-  // ---- karakter jalan kaki ----
+  // ---------- karakter jalan kaki: kapsul + bola, bukan balok ----------
   const personGroups = new Map();
   function buildPerson(color, armed, enemy) {
     const g = new THREE.Group();
-    putBox(g, 0, 0.95, 0, 0.7, 1.1, 0.4, lambert(color)); // badan
-    putBox(g, 0, 1.72, 0, 0.42, 0.42, 0.42, lambert(0xe8b98a)); // kepala
-    putBox(g, 0, 0.35, 0, 0.55, 0.7, 0.35, lambert(0x222831)); // kaki
-    if (armed) putBox(g, 0, 1.05, 0.45, 0.18, 0.18, 0.8, lambert(0x111111)); // senjata
+    const shirt = lambert(color);
+    const torso = capsuleMesh(0.3, 0.5, shirt);
+    torso.position.y = 0.95;
+    g.add(torso);
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.24, 14, 10), lambert(0xe8b98a));
+    head.position.y = 1.68;
+    g.add(head);
+    const hair = new THREE.Mesh(new THREE.SphereGeometry(0.25, 14, 8), lambert(0x1c1c22));
+    hair.scale.set(1, 0.62, 1);
+    hair.position.y = 1.8;
+    g.add(hair);
+    for (const sx of [-0.16, 0.16]) {
+      const leg = capsuleMesh(0.11, 0.45, lambert(0x222831));
+      leg.position.set(sx, 0.36, 0);
+      g.add(leg);
+      const arm = capsuleMesh(0.09, 0.4, shirt);
+      arm.position.set(sx * 1.9, 1.0, 0);
+      arm.rotation.z = sx > 0 ? -0.25 : 0.25;
+      g.add(arm);
+    }
+    if (armed) {
+      const gun = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.7, 8), lambert(0x111111));
+      gun.rotation.x = Math.PI / 2;
+      gun.position.set(0, 1.05, 0.5);
+      g.add(gun);
+    }
     if (enemy) {
       const marker = new THREE.Mesh(coneGeo, basic(0xff2222));
       marker.scale.set(0.5, 0.9, 0.5);
@@ -520,47 +918,90 @@ export function createRenderer(canvas) {
     }
   }
 
-  // ---- pemain jalan kaki ----
+  // ---------- pemain jalan kaki ----------
   const playerGroup = webglOK ? buildPerson(0x2e6fb5, true, false) : null;
   if (webglOK) scene.add(playerGroup);
 
-  // ---- helikopter ----
+  // ---------- helikopter: bodi kapsul + ekor silinder + rotor ----------
   const heliGroup = webglOK ? new THREE.Group() : null;
   let heliRotor = null;
   let heliBlink = null;
   let spotCone = null;
   let spotCircle = null;
+  let spotLight = null;
+  let spotTarget = null;
   if (webglOK) {
-    putBox(heliGroup, 0, 0, 0, 2.2, 1.4, 4.6, lambert(0x1f242e));
-    putBox(heliGroup, 0, 0.5, 1.6, 1.8, 1.0, 1.6, lambert(0x1a2942));
-    putBox(heliGroup, 0, 0.1, -3.6, 0.7, 0.7, 3.4, lambert(0x1f242e));
-    putBox(heliGroup, 0, 0.5, -5.2, 0.25, 1.6, 0.25, lambert(0x1f242e));
-    putBox(heliGroup, -0.9, -0.85, 0.8, 0.18, 0.18, 3.4, lambert(0x0d0d14));
-    putBox(heliGroup, 0.9, -0.85, 0.8, 0.18, 0.18, 3.4, lambert(0x0d0d14));
+    const heliPaint = gloss(0x232a38, 160);
+    const body = capsuleMesh(0.85, 2.4, heliPaint);
+    body.rotation.x = Math.PI / 2;
+    body.position.y = 0;
+    heliGroup.add(body);
+    const glass = new THREE.MeshPhongMaterial({ color: 0x0a1626, shininess: 320, specular: 0xffffff });
+    const cockpit = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 12), glass);
+    cockpit.scale.set(0.72, 0.62, 0.9);
+    cockpit.position.set(0, 0.15, 1.5);
+    heliGroup.add(cockpit);
+    const tailBoom = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.34, 3.4, 10), heliPaint);
+    tailBoom.rotation.x = Math.PI / 2;
+    tailBoom.position.set(0, 0.1, -3.2);
+    heliGroup.add(tailBoom);
+    const fin = new THREE.Mesh(sphereGeo, heliPaint);
+    fin.scale.set(0.35, 2.2, 1.4);
+    fin.position.set(0, 0.7, -4.6);
+    heliGroup.add(fin);
+    for (const sx of [-0.85, 0.85]) {
+      const skid = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 3.2, 8), lambert(0x0d0d14));
+      skid.rotation.x = Math.PI / 2;
+      skid.position.set(sx, -0.95, 0.6);
+      heliGroup.add(skid);
+      for (const sz of [-0.4, 1.4]) {
+        const strut = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.5, 6), lambert(0x0d0d14));
+        strut.position.set(sx, -0.7, sz);
+        heliGroup.add(strut);
+      }
+    }
     heliRotor = new THREE.Group();
-    heliRotor.position.y = 0.85;
-    putBox(heliRotor, 0, 0, 0, 11, 0.1, 0.5, lambert(0x0d0d14));
-    putBox(heliRotor, 0, 0, 0, 0.5, 0.1, 11, lambert(0x0d0d14));
+    heliRotor.position.y = 0.95;
+    const bladeMat = lambert(0x0d0d14);
+    for (const rot of [0, Math.PI / 2]) {
+      const blade = capsuleMesh(0.06, 10.4, bladeMat);
+      blade.rotation.z = Math.PI / 2;
+      const holder = new THREE.Group();
+      holder.rotation.y = rot;
+      holder.add(blade);
+      heliRotor.add(holder);
+    }
     heliGroup.add(heliRotor);
-    heliBlink = putBox(heliGroup, 0, -0.8, 0, 0.4, 0.2, 0.4, new THREE.MeshBasicMaterial({ color: 0xff1a1a }));
+    heliBlink = new THREE.Mesh(sphereGeo, new THREE.MeshBasicMaterial({ color: 0xff1a1a }));
+    heliBlink.scale.set(1.1, 0.7, 1.1);
+    heliBlink.position.set(0, -0.85, 0);
+    heliGroup.add(heliBlink);
+    const blinkGlow = glowSprite(0xff1a1a, 2.4);
+    blinkGlow.position.set(0, -0.85, 0);
+    heliGroup.add(blinkGlow);
     scene.add(heliGroup);
-    // Kerucut spotlight + lingkaran cahaya di tanah.
+    // Kerucut sorot + lingkaran cahaya di tanah + SpotLight sungguhan.
     const coneMat = new THREE.MeshBasicMaterial({
-      color: 0xfff0a0, transparent: true, opacity: 0.05,
+      color: 0xfff0a0, transparent: true, opacity: 0.035,
       blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide,
     });
-    spotCone = new THREE.Mesh(new THREE.ConeGeometry(6, 14, 20, 1, true), coneMat);
+    spotCone = new THREE.Mesh(new THREE.ConeGeometry(6.5, 14, 20, 1, true), coneMat);
     scene.add(spotCone);
     const circMat = new THREE.MeshBasicMaterial({
-      color: 0xfff0a0, transparent: true, opacity: 0.06,
+      color: 0xfff0a0, transparent: true, opacity: 0.05,
       blending: THREE.AdditiveBlending, depthWrite: false,
     });
     spotCircle = new THREE.Mesh(new THREE.CircleGeometry(5, 24), circMat);
     spotCircle.rotation.x = -Math.PI / 2;
     scene.add(spotCircle);
+    spotLight = new THREE.SpotLight(0xfff2b0, 0.75, 70, 0.42, 0.5, 1.1);
+    spotTarget = new THREE.Object3D();
+    scene.add(spotTarget);
+    spotLight.target = spotTarget;
+    scene.add(spotLight);
   }
 
-  // ---- tracer peluru + partikel ----
+  // ---------- tracer, partikel, marker, flash, hujan ----------
   const tracerGeo = webglOK ? new THREE.BufferGeometry() : null;
   const tracerPos = webglOK ? new Float32Array(3 * 2 * 64) : null;
   if (webglOK) {
@@ -580,8 +1021,6 @@ export function createRenderer(canvas) {
     points.frustumCulled = false;
     scene.add(points);
   }
-
-  // ---- marker misi / toko ----
   const markerMat = webglOK ? new THREE.MeshBasicMaterial({ color: 0xffd23f, transparent: true, opacity: 0.85, side: THREE.DoubleSide }) : null;
   const markerRing = webglOK ? new THREE.Mesh(new THREE.RingGeometry(1.4, 1.9, 32), markerMat) : null;
   if (webglOK) {
@@ -589,7 +1028,6 @@ export function createRenderer(canvas) {
     markerRing.position.y = 0.1;
     scene.add(markerRing);
   }
-  const shopMarkers = [];
   if (webglOK) {
     for (const s of SHOP_DEFS) {
       const ring = new THREE.Mesh(
@@ -599,34 +1037,28 @@ export function createRenderer(canvas) {
       ring.rotation.x = -Math.PI / 2;
       ring.position.set(s.x, 0.1, s.z);
       scene.add(ring);
-      const pillar = putBox(scene, s.x, 1.2, s.z, 0.5, 2.4, 0.5, basic(0x7dff8a));
-      shopMarkers.push({ ring, pillar });
+      putBox(scene, s.x, 1.2, s.z, 0.5, 2.4, 0.5, basic(0x7dff8a));
     }
   }
-
-  // ---- muzzle flash: cahaya titik + sprite kuning di ujung laras ----
   const flashLight = webglOK ? new THREE.PointLight(0xffd23f, 0, 18) : null;
   const flashSprite = webglOK ? new THREE.Sprite(new THREE.SpriteMaterial({ color: 0xffd23f, transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending, depthWrite: false })) : null;
   if (webglOK) {
     scene.add(flashLight);
-    flashSprite.scale.set(0.8, 0.8, 1);
+    flashSprite.scale.set(0.6, 0.6, 1);
     flashSprite.visible = false;
     scene.add(flashSprite);
   }
-  // ---- garis tembak kuning persisten (balok additif laras -> musuh) ----
   const flashBeam = webglOK ? new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial({ color: 0xffd23f, transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending, depthWrite: false })) : null;
   if (webglOK) {
     flashBeam.visible = false;
     scene.add(flashBeam);
   }
-
-  // ---- hujan: garis-garis vertikal di sekitar pemain (aktif bila G.rain) ----
-  const RAIN_COUNT = 350;
+  const RAIN_COUNT = 500;
   const rainGeo = webglOK ? new THREE.BufferGeometry() : null;
   let rain = null;
   if (webglOK) {
     const pos = new Float32Array(RAIN_COUNT * 2 * 3);
-    let rs = 1234567; // sebaran deterministik
+    let rs = 1234567;
     const rnd = () => { rs = (rs * 1664525 + 1013904223) >>> 0; return rs / 4294967296; };
     for (let i = 0; i < RAIN_COUNT; i += 1) {
       const x = (rnd() - 0.5) * 80;
@@ -635,13 +1067,13 @@ export function createRenderer(canvas) {
       pos.set([x, y, z, x, y - 1.2, z], i * 6);
     }
     rainGeo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-    rain = new THREE.LineSegments(rainGeo, new THREE.LineBasicMaterial({ color: 0x8fa8cc, transparent: true, opacity: 0.55 }));
+    rain = new THREE.LineSegments(rainGeo, new THREE.LineBasicMaterial({ color: 0x8fa8cc, transparent: true, opacity: 0.5 }));
     rain.frustumCulled = false;
     rain.visible = false;
     scene.add(rain);
   }
 
-  // ---- kamera ----
+  // ---------- kamera ----------
   const camPos = webglOK ? new THREE.Vector3(0, 40, 90) : null;
   const camLook = webglOK ? new THREE.Vector3(0, 0, 0) : null;
   let camInit = false;
@@ -661,22 +1093,19 @@ export function createRenderer(canvas) {
     window.addEventListener('resize', resize);
   }
 
-  // Warna langit + cahaya menurut jam game.
+  // Warna langit + cahaya menurut jam game. Semua shot memakai malam.
   function applyTimeOfDay(clock) {
     const hour = clock / 60;
     let top; let mid; let bot; let fog; let amb; let sunI; let sunC; let sunDir; let sunAmt;
     if (hour >= 17 && hour < 19) {
-      // Senja: oranye-ungu, matahari rendah di barat.
-      top = 0x2a338c; mid = 0xf28c59; bot = 0x8c4d4d; fog = 0x3b2a4d;
-      amb = 0.85; sunI = 1.0; sunC = 0xffb070;
-      sunDir = new THREE.Vector3(-0.75, 0.22, -0.15).normalize(); sunAmt = 1;
+      top = 0x1a1440; mid = 0x8a3a5a; bot = 0xc86a4a; fog = 0x2a1a30;
+      amb = 0.7; sunI = 0.8; sunC = 0xff9a6a;
+      sunDir = new THREE.Vector3(-0.75, 0.22, -0.15).normalize(); sunAmt = 0.8;
     } else if (hour >= 19 || hour < 6) {
-      // Malam: biru gelap, bulan redup.
-      top = 0x0a0d2a; mid = 0x1a2450; bot = 0x2a1a38; fog = 0x141828;
-      amb = 0.45; sunI = 0.3; sunC = 0x8fa8ff;
+      top = 0x05060f; mid = 0x131a3a; bot = 0x2a1638; fog = 0x0b0e1a;
+      amb = 0.62; sunI = 0.42; sunC = 0x9fb4ff;
       sunDir = new THREE.Vector3(0.3, 0.6, -0.4).normalize(); sunAmt = 0.25;
     } else {
-      // Siang: biru cerah, matahari tinggi.
       top = 0x3a6fd8; mid = 0x9fc8e8; bot = 0xe8d8b0; fog = 0xa8c8d8;
       amb = 0.95; sunI = 1.25; sunC = 0xfff2d0;
       sunDir = new THREE.Vector3(0.3, 0.85, 0.25).normalize(); sunAmt = 0.7;
@@ -688,9 +1117,9 @@ export function createRenderer(canvas) {
     skyUniforms.uSunAmt.value = sunAmt;
     scene.fog.color.setHex(fog);
     ambient.intensity = amb;
-    sun.intensity = sunI;
-    sun.color.setHex(sunC);
-    sun.position.copy(sunDir).multiplyScalar(100);
+    moon.intensity = sunI;
+    moon.color.setHex(sunC);
+    moon.position.copy(sunDir).multiplyScalar(100);
   }
 
   function draw(G) {
@@ -698,16 +1127,13 @@ export function createRenderer(canvas) {
     buildCity(G);
     const t = G.time;
     applyTimeOfDay(G.clock);
-
-    // Hujan: garis jatuh mengelilingi pemain (offset berputar tiap 1,2u).
+    if (scene.userData.heroLight) {
+      scene.userData.heroLight.position.set(G.player.x, 6, G.player.z);
+    }
     if (rain) {
       rain.visible = !!G.rain;
-      if (G.rain) {
-        rain.position.set(G.player.x, -((G.time * 22) % 1.2), G.player.z);
-      }
+      if (G.rain) rain.position.set(G.player.x, -((G.time * 22) % 1.2), G.player.z);
     }
-
-    // Kerang: sembunyikan yang sudah diambil.
     if (shellMesh && G.shells) {
       G.shells.forEach((s, i) => {
         dummy.position.set(s.x, 0.4, s.z);
@@ -718,18 +1144,14 @@ export function createRenderer(canvas) {
       });
       shellMesh.instanceMatrix.needsUpdate = true;
     }
-
     syncCars(G, t);
     syncPeople(G, t);
-
-    // Pemain jalan kaki (sembunyi saat di mobil).
     const p = G.player;
     playerGroup.visible = p.onFoot;
     if (p.onFoot) {
       playerGroup.position.set(p.x, 0, p.z);
       playerGroup.rotation.y = p.angle;
     }
-
     // Helikopter + sorot.
     if (G.heli) {
       const h = G.heli;
@@ -737,11 +1159,10 @@ export function createRenderer(canvas) {
       heliGroup.position.set(h.x, h.y, h.z);
       heliGroup.rotation.y = h.angle;
       heliRotor.rotation.y = h.rotor;
-      heliBlink.material.color.setHex(Math.floor(t * 2) % 2 === 0 ? 0xff1a1a : 0x111111);
+      heliBlink.material.color.setHex(Math.floor(t * 2) % 2 === 0 ? 0xff1a1a : 0x441111);
       spotCone.visible = true;
       spotCircle.visible = true;
-      // Kerucut: puncak di heli, mulut di tanah dekat pemain. Sumbu Y
-      // kerucut diarahkan dari pemain ke heli, panjang disesuaikan jarak.
+      spotLight.visible = true;
       const dx = h.x - p.x;
       const dz = h.z - p.z;
       const dist = Math.hypot(dx, h.y, dz);
@@ -750,24 +1171,25 @@ export function createRenderer(canvas) {
         new THREE.Vector3(0, 1, 0),
         new THREE.Vector3(dx / dist, h.y / dist, dz / dist),
       );
-      spotCone.scale.set(0.45, Math.max(0.6, dist / 14), 0.45);
+      spotCone.scale.set(0.4, Math.max(0.6, dist / 14), 0.4);
       spotCircle.position.set(p.x, 0.09, p.z);
-      spotCircle.scale.set(0.4, 0.4, 1); // cakram sorot kecil, jangan tutupi jalan/mobil
+      spotCircle.scale.set(0.65, 0.65, 1);
+      spotLight.position.set(h.x, h.y - 0.5, h.z);
+      spotTarget.position.set(p.x, 0, p.z);
     } else {
       heliGroup.visible = false;
       spotCone.visible = false;
       spotCircle.visible = false;
+      spotLight.visible = false;
     }
-
-    // Muzzle flash: cahaya + sprite di ujung laras.
+    // Muzzle flash.
     if (G.muzzleFlash > 0 && p.onFoot) {
       const fx = p.x + Math.sin(p.aimAngle) * 1.4;
       const fz = p.z + Math.cos(p.aimAngle) * 1.4;
       flashLight.position.set(fx, 1.6, fz);
-      flashLight.intensity = 3;
+      flashLight.intensity = 2;
       flashSprite.position.set(fx, 1.6, fz);
       flashSprite.visible = true;
-      // Balok tracer persisten laras -> target (tidak ikut decay peluru).
       if (G.flashTarget) {
         const tx = G.flashTarget.x;
         const tz = G.flashTarget.z;
@@ -784,7 +1206,6 @@ export function createRenderer(canvas) {
       flashSprite.visible = false;
       flashBeam.visible = false;
     }
-
     // Tracer peluru.
     let n = 0;
     for (const b of G.bullets) {
@@ -799,7 +1220,6 @@ export function createRenderer(canvas) {
     }
     tracerGeo.setDrawRange(0, n * 2);
     tracerGeo.attributes.position.needsUpdate = true;
-
     // Partikel.
     const pc = new THREE.Color();
     let pn = 0;
@@ -817,7 +1237,6 @@ export function createRenderer(canvas) {
     partGeo.setDrawRange(0, pn);
     partGeo.attributes.position.needsUpdate = true;
     partGeo.attributes.color.needsUpdate = true;
-
     // Marker objektif misi.
     let markerAt = null;
     const m = G.mission;
@@ -847,17 +1266,13 @@ export function createRenderer(canvas) {
     } else {
       markerRing.visible = false;
     }
-
-    // ---- kamera ----
+    // ---------- kamera: chase rendah + dekat ----------
     if (G.shotCam) {
-      // Kamera staging deterministik (?shot=): posisi + tatapan persis,
-      // tanpa lerp — dipakai shot chase/shootout supaya hero besar di frame.
       camPos.set(G.shotCam.px, G.shotCam.py, G.shotCam.pz);
       camLook.set(G.shotCam.lx, G.shotCam.ly, G.shotCam.lz);
       camInit = false;
     } else if (G.screen === 'title') {
       if (G.titleFixed) {
-        // Poster: mobil hero + Raka besar di foreground kiri-bawah, kota neon di belakang.
         camPos.set(10, 2.6, 30);
         camLook.set(8, 4.5, 16);
       } else {
@@ -868,8 +1283,8 @@ export function createRenderer(canvas) {
       camInit = false;
     } else {
       const inCar = !p.onFoot;
-      const back = inCar ? 10.5 : 7;
-      const up = inCar ? 4.4 : 3.2;
+      const back = inCar ? 7.4 : 5.6;
+      const up = inCar ? 2.7 : 2.5;
       const tx = p.x - Math.sin(p.angle) * back;
       const tz = p.z - Math.cos(p.angle) * back;
       if (!camInit) {
@@ -880,15 +1295,14 @@ export function createRenderer(canvas) {
       camPos.x += (tx - camPos.x) * k;
       camPos.y += (up - camPos.y) * k;
       camPos.z += (tz - camPos.z) * k;
-      camLook.set(p.x + Math.sin(p.angle) * 7, 1.6, p.z + Math.cos(p.angle) * 7);
+      camLook.set(p.x + Math.sin(p.angle) * 8, 1.5, p.z + Math.cos(p.angle) * 8);
     }
     const shx = G.shake > 0 ? (Math.random() - 0.5) * G.shake * 0.3 : 0;
     const shy = G.shake > 0 ? (Math.random() - 0.5) * G.shake * 0.3 : 0;
     camera.position.set(camPos.x + shx, camPos.y + shy, camPos.z);
     camera.lookAt(camLook);
     renderer.render(scene, camera);
-
-    // Titik bidik mouse di tanah (y=0) — dipakai pemain jalan kaki.
+    // Titik bidik mouse di tanah (y=0).
     if (G.input) {
       ndc.set((G.input.mouse.x / G.viewW) * 2 - 1, -(G.input.mouse.y / G.viewH) * 2 + 1);
       raycaster.setFromCamera(ndc, camera);
@@ -906,6 +1320,6 @@ export function createRenderer(canvas) {
     resize,
     snapCamera() { camInit = false; },
     get webglOK() { return webglOK; },
-    _scene: scene, // hook debug: inspeksi scene dari console/playtest
+    _scene: scene,
   };
 }

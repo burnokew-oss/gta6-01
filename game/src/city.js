@@ -1,9 +1,11 @@
 // Generasi kota Teluk Cerah 3D: grid jalan, blok bangunan per distrik,
-// pohon palem, lampu jalan, kontainer pelabuhan, dan kerang kolektibel.
+// palem, lampu jalan, kontainer pelabuhan, dan kerang kolektibel.
 //
 // Semua deterministik dari seed yang sama. Bangunan disimpan sebagai
-// kotak berpusat (x, z, w, d, h) — format yang langsung dipakai renderer
-// 3D (InstancedMesh) dan dipakai juga untuk tabrakan di bidang XZ.
+// balok berpusat (x, z, w, d, h) — format yang dipakai renderer
+// (InstancedMesh) dan tabrakan di bidang XZ. Detail pembulat dan neon
+// ditambahkan renderer di atas data ini, jadi bentuk di layar tidak
+// lagi terbaca sebagai balok polos.
 import { CITY_HALF, ROAD_LINES, ROAD_WIDTH, districtAt } from './config.js';
 
 export { districtAt };
@@ -29,11 +31,11 @@ export function nearestRoadPoint(x, z) {
   return { x: bx, z: bz };
 }
 
-const PALETTE_OLD = [0xb08968, 0xa87a5a, 0x9c7a52];
-const PALETTE_CBD = [0x6b7f99, 0x5a6f8f, 0x7a8aa8];
-const PALETTE_HOUSE = [0xc98f7a, 0xb87f6a, 0xd8a08a];
-const PALETTE_PORT = [0x8a7d6b, 0x7a6d5b];
-const PALETTE_MARINA = [0xd8b98a, 0xc8a878];
+const PALETTE_OLD = [0x8a6a52, 0x7a5f4a, 0x6a5a48];
+const PALETTE_CBD = [0x3a4a66, 0x32405c, 0x46587a];
+const PALETTE_HOUSE = [0x8a5f4e, 0x7a5346, 0x96685a];
+const PALETTE_PORT = [0x5f5648, 0x524a3e];
+const PALETTE_MARINA = [0x9a7f5e, 0x8a6f52];
 
 function styleFor(rng, district) {
   if (district === 'CBD') {
@@ -72,16 +74,21 @@ export function createCity(rng) {
       }
       const nPalms = rng.int(2, 5);
       for (let k = 0; k < nPalms; k += 1) {
-        palms.push({ x: rng.range(x0, x1), z: rng.range(z0, z1), h: rng.range(4, 7) });
+        palms.push({ x: rng.range(x0, x1), z: rng.range(z0, z1), h: rng.range(5, 9) });
       }
     }
   }
 
-  // Lampu jalan di tiap persimpangan.
+  // Lampu jalan di tiap persimpangan + deret lampu di koridor chase
+  // (z=12) dan pelabuhan (z=100) supaya kolam cahaya rapat di frame.
   for (const lx of lines) {
     for (const lz of lines) {
       lamps.push({ x: lx + ROAD_WIDTH / 2 + 1, z: lz + ROAD_WIDTH / 2 + 1 });
     }
+  }
+  for (let x = -100; x <= 110; x += 22) {
+    lamps.push({ x, z: 12 - ROAD_WIDTH / 2 - 1 });
+    lamps.push({ x: x + 11, z: 100 + ROAD_WIDTH / 2 + 1 });
   }
 
   // Kontainer pelabuhan (selatan) — dijaga dari jalan supaya tidak
@@ -146,7 +153,6 @@ export function collideBuildings(city, x, z, r) {
       x = nx + (dx / d) * r;
       z = nz + (dz / d) * r;
     } else if (d2 <= 0.001) {
-      // Tepat di dalam bangunan: dorong ke sisi terdekat.
       const left = x - (b.x - b.w / 2);
       const right = (b.x + b.w / 2) - x;
       const front = z - (b.z - b.d / 2);
