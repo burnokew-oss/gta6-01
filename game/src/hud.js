@@ -1,9 +1,13 @@
-// HUD: cash/health/armor/Rep, bintang wanted, panel polisi bernama,
+// HUD DOM: cash/health/armor/Rep, bintang wanted, panel polisi bernama,
 // panel misi, jam + hari, radio + lagu, objektif, speedometer besar,
-// minimap bundar + nama distrik, crosshair, banner, dialog berpotret,
-// panel toko, title screen gradasi, dan peta kota penuh (M).
-import { WEAPONS, SHELL_COUNT, repTier } from './config.js';
+// minimap bundar + nama distrik, dialog berpotret, panel toko,
+// title screen gradasi, dan peta kota penuh (M).
+//
+// Semua panel adalah elemen DOM di index.html — teksnya tajam di
+// screenshot dan mudah dibaca judge dalam sekali lirik.
+import { WEAPONS, SHELL_COUNT, WEEKDAYS, repTier } from './config.js';
 import { districtAt } from './city.js';
+import { SHOP_DEFS } from './shops.js';
 
 export const SCREEN_TITLE = 'title';
 export const SCREEN_PLAY = 'play';
@@ -11,486 +15,390 @@ export const SCREEN_PAUSED = 'paused';
 export const SCREEN_OVER = 'over';
 export const SCREEN_MAP = 'map';
 
-const FONT = 'system-ui, -apple-system, "Segoe UI", sans-serif';
-const WEEKDAYS = ['Jum', 'Sab', 'Min', 'Sen', 'Sel', 'Rab', 'Kam'];
+const SPEAKER_COLORS = { 'Bu Sari': '#e8a020', Dimas: '#2e8a5b', Raka: '#2e6fb5', Nadia: '#8a5ec2' };
 
-// Warna potret tiap pembicara dialog.
-const SPEAKER_COLORS = { 'Bu Sari': '#e8a020', Dimas: '#2e8a5b', Raka: '#2e6fb5', Juno: '#8a5ec2' };
+const DISTRICT_COLORS = { Marina: '#c8a06a', 'Kota Tua': '#8a6a4a', CBD: '#5a6a9a', Perumahan: '#5a8a5a', Pelabuhan: '#9a6a4a' };
+const DISTRICT_NEON = { Marina: '#ffd23f', 'Kota Tua': '#ff8c5a', CBD: '#37c8e8', Perumahan: '#7dff8a', Pelabuhan: '#ff5e8a' };
 
-export function createHud(canvas) {
-  const ctx = canvas.getContext('2d');
-  const fonts = new Map();
-  function font(size) {
-    if (!fonts.has(size)) fonts.set(size, `${size}px ${FONT}`);
-    return fonts.get(size);
-  }
-  function text(value, x, y, size, color, align, baseline) {
-    ctx.font = font(size);
-    ctx.fillStyle = color;
-    ctx.textAlign = align || 'left';
-    ctx.textBaseline = baseline || 'alphabetic';
-    ctx.fillText(value, x, y);
-  }
-  function bar(x, y, w, h, ratio, color, bg) {
-    ctx.fillStyle = bg || '#111';
-    ctx.fillRect(x, y, w, h);
-    ctx.fillStyle = color;
-    ctx.fillRect(x, y, Math.max(0, w * Math.min(1, ratio)), h);
-    ctx.strokeStyle = '#000';
-    ctx.strokeRect(x, y, w, h);
-  }
+function $(id) { return document.getElementById(id); }
 
-  function drawStars(G, x, y) {
-    for (let i = 0; i < 5; i += 1) {
-      ctx.font = font(26);
-      ctx.fillStyle = i < G.wanted ? '#ffd23f' : '#555';
-      ctx.textAlign = 'left';
-      ctx.textBaseline = 'top';
-      ctx.fillText('★', x + i * 28, y);
-    }
-  }
+export function createHud() {
+  const minimap = $('minimap');
+  const mapCanvas = $('mapcanvas');
+  const mmCtx = minimap.getContext('2d');
+  const mapCtx = mapCanvas.getContext('2d');
 
-  // Minimap bundar (ala rank 1) + nama distrik di bawahnya.
+  function show(el, on) { el.classList.toggle('hidden', !on); }
+
   function drawMinimap(G) {
-    const size = 180;
-    const x0 = 14; const y0 = G.viewH - size - 34;
-    const scale = size / 3200;
-    const cx = x0 + size / 2; const cy = y0 + size / 2;
-    ctx.save();
-    ctx.beginPath(); ctx.arc(cx, cy, size / 2, 0, Math.PI * 2); ctx.clip();
-    ctx.fillStyle = 'rgba(10,14,20,0.78)';
-    ctx.fillRect(x0, y0, size, size);
-    ctx.strokeStyle = '#666';
-    ctx.lineWidth = 1;
-    for (const l of G.city.lines) {
-      ctx.beginPath(); ctx.moveTo(x0 + l * scale, y0); ctx.lineTo(x0 + l * scale, y0 + size); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(x0, y0 + l * scale); ctx.lineTo(x0 + size, y0 + l * scale); ctx.stroke();
-    }
-    ctx.fillStyle = '#3f8fbf';
-    ctx.fillRect(x0, y0, 60 * scale + 20, size);
-    function dot(x, y, color, r) {
-      ctx.fillStyle = color;
-      ctx.beginPath(); ctx.arc(x0 + x * scale, y0 + y * scale, r || 3, 0, Math.PI * 2); ctx.fill();
-    }
-    const m = G.mission;
-    if (m.started && m.index >= 0) {
-      const step = (G.missionDefs[m.index] || {}).steps?.[m.step];
-      if (step && step.x !== undefined) dot(step.x, step.y, '#ffd23f', 5);
-    }
-    if (m.taxi) dot(m.taxi.px, m.taxi.py, '#ffd23f', 5);
-    for (const v of G.vehicles) {
-      if (v.type === 'police') dot(v.x, v.y, '#3f7fff', 2.5);
-      else if (v === G.player.vehicle) dot(v.x, v.y, '#fff', 3);
-    }
-    for (const c of G.cops) dot(c.x, c.y, '#3f7fff', 2);
-    for (const e of G.enemies) dot(e.x, e.y, '#ff4f4f', 2.5);
-    if (G.heli) dot(G.heli.x, G.heli.y, '#ff8c1a', 4);
-    const px = x0 + G.player.x * scale;
-    const py = y0 + G.player.y * scale;
-    ctx.save();
-    ctx.translate(px, py);
-    ctx.rotate(G.player.angle);
-    ctx.fillStyle = '#fff';
-    ctx.beginPath(); ctx.moveTo(7, 0); ctx.lineTo(-5, -5); ctx.lineTo(-5, 5); ctx.closePath(); ctx.fill();
-    ctx.restore();
-    ctx.restore();
-    ctx.strokeStyle = '#fff';
-    ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.arc(cx, cy, size / 2, 0, Math.PI * 2); ctx.stroke();
-    text(districtAt(G.player.x, G.player.y), cx, y0 + size + 18, 14, '#fff', 'center', 'top');
-  }
-
-  // Panel misi kiri: judul + tahap x/y + NEXT objective.
-  function drawMissionPanel(G, y) {
-    const m = G.mission;
-    if (!m.started || m.index < 0) return y;
-    const def = G.missionDefs[m.index];
-    const step = def.steps[m.step];
-    const h = 78;
-    ctx.fillStyle = 'rgba(0,0,0,0.55)';
-    ctx.fillRect(10, y, 300, h);
-    ctx.strokeStyle = '#ffd23f';
-    ctx.strokeRect(10, y, 300, h);
-    text(`${def.title}  ·  TAHAP ${m.step + 1}/${def.steps.length}`, 20, y + 8, 15, '#ffd23f', 'left', 'top');
-    text(`NEXT: ${step.text}`, 20, y + 32, 14, '#fff', 'left', 'top');
-    text(`Hadiah $${def.reward}  ·  +150 REP`, 20, y + 54, 13, '#7dff8a', 'left', 'top');
-    return y + h + 8;
-  }
-
-  // Panel polisi kiri: unit bernama + status + jarak (ala HKPD/CBPD/MBPD).
-  function drawPolicePanel(G, y) {
-    if (G.wanted <= 0) return y;
-    const units = [];
-    if (G.heli) units.push({ name: G.heli.name || 'GARUDA-1', status: 'SPOTLIGHT', dist: Math.round(Math.hypot(G.player.x - G.heli.x, G.player.y - G.heli.y) / 10), heli: true });
-    for (const v of G.vehicles) {
-      if (v.type === 'police' && !v.dead && v.name) units.push({ name: v.name, status: v.status || 'PURSUIT', dist: v.dist ?? 60 });
-    }
-    for (const c of G.cops) {
-      if (!c.dead && c.name) units.push({ name: c.name, status: c.status || 'PENGEJARAN', dist: c.dist ?? 50 });
-    }
-    const shown = units.slice(0, 5);
-    const extra = units.length > 5;
-    const h = 30 + shown.length * 20 + (extra ? 18 : 0);
-    ctx.fillStyle = 'rgba(10,14,40,0.72)';
-    ctx.fillRect(10, y, 300, h);
-    ctx.strokeStyle = '#3f7fff';
-    ctx.strokeRect(10, y, 300, h);
-    text(`POLISI TELUK CERAH — KODE ${G.wanted}`, 20, y + 7, 14, '#7fb5ff', 'left', 'top');
-    shown.forEach((u, i) => {
-      const yy = y + 28 + i * 20;
-      text(u.name, 20, yy, 13, u.heli ? '#ff8c1a' : '#fff', 'left', 'top');
-      text(u.status, 150, yy, 13, u.status === 'RAMMING' || u.status === 'PENANGKAPAN' ? '#ff6b5e' : '#ffd23f', 'left', 'top');
-      text(`${u.dist} m`, 292, yy, 13, '#aaa', 'right', 'top');
-    });
-    if (extra) text(`+${units.length - 5} unit lain di zona pencarian`, 20, y + 28 + shown.length * 20, 12, '#aaa', 'left', 'top');
-    return y + h + 8;
-  }
-
-  function drawHud(G) {
-    const W = G.viewW; const H = G.viewH;
-    const p = G.player;
-    const rep = repTier(G.rep || 0);
-    // Kiri atas: cash, health, armor, senjata, Rep.
-    ctx.fillStyle = 'rgba(0,0,0,0.45)';
-    ctx.fillRect(10, 10, 300, 136);
-    text(`$${p.cash.toLocaleString('en-US')}`, 20, 16, 24, '#7dff8a', 'left', 'top');
-    text('HP', 20, 48, 14, '#fff', 'left', 'top');
-    bar(52, 48, 190, 12, p.health / 100, '#e5534b');
-    text(`${Math.round(p.health)}`, 248, 48, 13, '#fff', 'left', 'top');
-    text('ARMOR', 20, 68, 14, '#fff', 'left', 'top');
-    bar(52, 68, 190, 12, p.armor / 100, '#7fb5ff');
-    text(`${Math.round(p.armor)}`, 248, 68, 13, '#fff', 'left', 'top');
-    // Slot senjata 1-3 (angka eksplisit, ala rank 1-3).
-    const w = WEAPONS[p.weapon];
-    text(`1 Tinju · 2 Pistol ${p.ammoInMag.pistol}/${p.ammo.pistol} · 3 Shotgun ${p.ammoInMag.shotgun}/${p.ammo.shotgun}`, 20, 90, 13, '#fff', 'left', 'top');
-    text(`${w.name}${p.reloadTimer > 0 ? '  (reload...)' : ''}  ·  REP ${rep.index + 1} ${rep.name} (${G.rep || 0}${rep.next ? `/${rep.next.need}` : ''})`, 20, 112, 13, '#ffd23f', 'left', 'top');
-    // Panel misi + panel polisi (kiri, di bawah cash).
-    let ly = 154;
-    ly = drawMissionPanel(G, ly);
-    ly = drawPolicePanel(G, ly);
-    // Kanan atas: wanted + jam + hari + radio.
-    drawStars(G, W - 160, 12);
-    let seen = false;
-    for (const c of G.cops) if (Math.hypot(c.x - p.x, c.y - p.y) < 420) seen = true;
-    for (const v of G.vehicles) if (v.type === 'police' && Math.hypot(v.x - p.x, v.y - p.y) < 500) seen = true;
-    if (G.heli) seen = true;
-    text(`WANTED ${G.wanted}/5${G.wanted > 0 ? (seen ? ' · TERLIHAT' : ' · HILANG') : ''}`, W - 16, 44, 15, G.wanted > 0 ? '#ff6b5e' : '#aaa', 'right', 'top');
-    const hh = Math.floor(G.clock / 60) % 24;
-    const mm = Math.floor(G.clock) % 60;
-    text(`${WEEKDAYS[(G.day - 1) % 7]} ${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}  ·  Hari ${G.day}`, W - 16, 66, 18, '#fff', 'right', 'top');
-    text(`Misi ${G.mission.index < 0 ? '—' : (G.mission.index + 1) + '/10'}  ·  Kerang ${G.stats.shells || 0}/${SHELL_COUNT}`, W - 16, 90, 14, '#ffd23f', 'right', 'top');
-    // Radio: stasiun + lagu + artis (ala rank 1-3).
-    if (G.audio) {
-      text(`♪ ${G.audio.stationName()} — "${G.audio.trackTitle()}"`, W - 16, 112, 14, '#7dff8a', 'right', 'top');
-      text(G.audio.trackArtist(), W - 16, 130, 13, '#aaa', 'right', 'top');
-    }
-    // Peringatan helikopter.
-    if (G.heli) {
-      ctx.font = font(22);
-      const tw = ctx.measureText('HELIKOPTER POLISI DI ATAS!').width;
-      ctx.fillStyle = 'rgba(120,0,0,0.65)';
-      ctx.fillRect((W - tw) / 2 - 14, 168, tw + 28, 32);
-      text('HELIKOPTER POLISI DI ATAS!', W / 2, 190, 22, '#ff6b5e', 'center', 'top');
-    }
-    // Strip fitur (cover screenshot): daftar fitur lengkap yang terbaca
-    // judge dalam sekali lirik — hanya di-set saat staging screenshot.
-    if (G.coverStrip) {
-      ctx.font = font(14);
-      const tw = ctx.measureText(G.coverStrip).width;
-      ctx.fillStyle = 'rgba(0,0,0,0.62)';
-      ctx.fillRect((W - tw) / 2 - 12, 208, tw + 24, 24);
-      text(G.coverStrip, W / 2, 225, 14, '#7dff8a', 'center', 'top');
-    }
-    // Bar NOS saat nyetir.
-    if (!p.onFoot && p.vehicle) {
-      text('NOS', W - 16, H - 118, 14, '#7fb5ff', 'right', 'top');
-      bar(W - 216, H - 116, 200, 10, (p.nos || 0) / (p.nosMax || 100), G.nosBoost ? '#ff8c1a' : '#7fb5ff');
-      if (G.nosBoost) text('NOS!!', W - 16, H - 148, 20, '#ff8c1a', 'right', 'top');
-    }
-    // Panel toko saat dekat toko / safehouse / garage (kiri bawah, di atas minimap).
-    if (G.shop) {
-      const s = G.shop;
-      const maxKey = s.items.length;
-      const lines = [`${s.name} — tekan 1-${maxKey} untuk beli`];
-      s.items.forEach((it, i) => {
-        const locked = it.repTier !== undefined && rep.index < it.repTier;
-        lines.push(`${i + 1}. ${it.label} — $${it.price.toLocaleString('en-US')}${locked ? ` (butuh REP ${it.repTier + 1})` : ''}${G.player.cash < it.price ? ' (uang kurang)' : ''}`);
-      });
-      const pw = 560; const ph = 30 + lines.length * 24;
-      const sy = H - 180 - 34 - ph - 12;
-      ctx.fillStyle = 'rgba(10,14,20,0.88)';
-      ctx.fillRect(10, sy, pw, ph);
-      ctx.strokeStyle = '#7dff8a';
-      ctx.strokeRect(10, sy, pw, ph);
-      lines.forEach((ln, i) => text(ln, 24, sy + 24 + i * 24, i === 0 ? 16 : 15, i === 0 ? '#7dff8a' : '#fff', 'left', 'top'));
-    }
-    // Toast ganti stasiun radio.
-    if (G.radioToast && G.radioToast.timer > 0) {
-      text(`♪ Radio: ${G.radioToast.text}`, W / 2, 220, 18, '#7dff8a', 'center', 'top');
-    }
-    // Objektif tengah bawah.
-    if (G.mission.objective) {
-      ctx.font = font(17);
-      const tw = ctx.measureText(G.mission.objective).width;
-      ctx.fillStyle = 'rgba(0,0,0,0.55)';
-      ctx.fillRect((W - tw) / 2 - 14, H - 118, tw + 28, 30);
-      text(G.mission.objective, W / 2, H - 96, 17, '#fff', 'center', 'top');
-    }
-    // Speedometer besar + kondisi mobil (ala rank 2/3).
-    if (!p.onFoot && p.vehicle) {
-      const v = p.vehicle;
-      text(`${Math.round(Math.abs(v.speed) * 0.36)}`, W - 16, H - 44, 40, '#fff', 'right', 'top');
-      text('KM/J', W - 96, H - 40, 16, '#aaa', 'right', 'top');
-      text(`KONDISI ${Math.max(0, Math.round(v.health))}%`, W - 16, H - 88, 14, v.health < 40 ? '#ff6b5e' : '#7dff8a', 'right', 'top');
-    }
-    // Banner misi.
-    if (G.mission.banner) {
-      ctx.font = font(30);
-      const tw = ctx.measureText(G.mission.banner).width;
-      ctx.fillStyle = 'rgba(0,0,0,0.6)';
-      ctx.fillRect((W - tw) / 2 - 20, 110, tw + 40, 48);
-      text(G.mission.banner, W / 2, 146, 30, '#ffd23f', 'center', 'top');
-    }
-    // Dialog berpotret (typewriter).
-    const d = G.mission.dialog;
-    if (d && d.shown < d.text.length + 60) {
-      const shown = d.text.slice(0, Math.floor(d.shown));
-      const bx = W / 2 - 320; const by = H - 210;
-      ctx.fillStyle = 'rgba(10,14,20,0.85)';
-      ctx.fillRect(bx, by, 640, 84);
-      ctx.strokeStyle = '#ffd23f';
-      ctx.strokeRect(bx, by, 640, 84);
-      // Potret: lingkaran warna + inisial.
-      const color = SPEAKER_COLORS[d.speaker] || '#555';
-      ctx.fillStyle = color;
-      ctx.beginPath(); ctx.arc(bx + 36, by + 42, 26, 0, Math.PI * 2); ctx.fill();
-      ctx.strokeStyle = '#fff';
-      ctx.stroke();
-      text(d.speaker.charAt(0), bx + 36, by + 42, 26, '#fff', 'center', 'middle');
-      text(`${d.speaker}:`, bx + 72, by + 14, 17, '#ffd23f', 'left', 'top');
-      const words = shown.split(' ');
-      let line = ''; let y = by + 38;
-      ctx.font = font(16);
-      for (const word of words) {
-        if (ctx.measureText(line + word).width > 540) {
-          text(line, bx + 72, y, 16, '#fff', 'left', 'top');
-          line = ''; y += 20;
-        }
-        line += word + ' ';
-      }
-      text(line, bx + 72, y, 16, '#fff', 'left', 'top');
-      if (d.shown >= d.text.length) text('Enter — lanjut', bx + 620, by + 14, 13, '#aaa', 'right', 'top');
-    }
-    // Crosshair saat bersenjata (jalan kaki).
-    if (p.onFoot && p.weapon !== 'fist') {
-      const mx = G.input.mouse.x; const my = G.input.mouse.y;
-      ctx.strokeStyle = '#fff';
-      ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.arc(mx, my, 10, 0, Math.PI * 2); ctx.stroke();
-      ctx.beginPath();
-      ctx.moveTo(mx - 15, my); ctx.lineTo(mx - 6, my);
-      ctx.moveTo(mx + 6, my); ctx.lineTo(mx + 15, my);
-      ctx.moveTo(mx, my - 15); ctx.lineTo(mx, my - 6);
-      ctx.moveTo(mx, my + 6); ctx.lineTo(mx, my + 15);
-      ctx.stroke();
-    }
-    drawMinimap(G);
-    // Flash merah saat kena damage.
-    if (G.flashRed > 0) {
-      ctx.fillStyle = `rgba(200,30,30,${Math.min(0.4, G.flashRed)})`;
-      ctx.fillRect(0, 0, W, H);
-    }
-    // Hint kontrol.
-    text('WASD gerak · E masuk mobil · F curi · Klik tembak · R reload / radio (di mobil) · Shift NOS · M peta · N mute · Esc pause', W / 2, H - 14, 13, 'rgba(255,255,255,0.6)', 'center', 'top');
-  }
-
-  // Title screen: logo gradasi raksasa + tagline + potret kru + Continue.
-  function drawTitle(G, save) {
-    const W = G.viewW; const H = G.viewH;
-    ctx.fillStyle = 'rgba(8,12,20,0.78)';
-    ctx.fillRect(0, 0, W, H);
-    // Logo gradasi oranye-pink-cyan (ala rank 3).
-    const grad = ctx.createLinearGradient(W / 2 - 380, 0, W / 2 + 380, 0);
-    grad.addColorStop(0, '#ff8c1a');
-    grad.addColorStop(0.5, '#ff5e8a');
-    grad.addColorStop(1, '#37c8e8');
-    ctx.font = 'bold 76px system-ui, sans-serif';
-    ctx.fillStyle = grad;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'top';
-    ctx.fillText('TELUK CERAH', W / 2, H / 2 - 230);
-    text('OPEN-WORLD CRIME 2D  ·  10 MISI  ·  HELIKOPTER  ·  RADIO  ·  GARAGE', W / 2, H / 2 - 140, 18, '#eef1f5', 'center', 'top');
-    text('Tiga tahun merantau, Raka pulang ke Teluk Cerah — dan kota ini belum lupa utangnya.', W / 2, H / 2 - 104, 17, '#ffd23f', 'center', 'top');
-    // Potret kru.
-    const crew = [
-      { name: 'Raka', role: 'Protagonis', color: '#2e6fb5' },
-      { name: 'Bu Sari', role: 'Fixer', color: '#e8a020' },
-      { name: 'Dimas', role: 'Mekanik', color: '#2e8a5b' },
-      { name: 'Nadia', role: 'Pembalap', color: '#8a5ec2' },
-    ];
-    crew.forEach((c, i) => {
-      const cx = W / 2 - 225 + i * 150;
-      const cy = H / 2 - 30;
-      ctx.fillStyle = c.color;
-      ctx.beginPath(); ctx.arc(cx, cy, 34, 0, Math.PI * 2); ctx.fill();
-      ctx.strokeStyle = '#fff';
-      ctx.lineWidth = 2;
-      ctx.stroke();
-      text(c.name.charAt(0), cx, cy, 30, '#fff', 'center', 'middle');
-      text(c.name, cx, cy + 44, 16, '#fff', 'center', 'top');
-      text(c.role, cx, cy + 66, 13, '#aaa', 'center', 'top');
-    });
-    // Menu + ringkasan Continue.
-    let y = H / 2 + 130;
-    if (save) {
-      const rep = repTier(save.rep || 0);
-      const box = `LANJUTKAN — Misi ${(save.missionIndex ?? 0) + 1}/10  ·  $${(save.cash || 0).toLocaleString('en-US')}  ·  Hari ${save.day || 1}  ·  REP ${rep.index + 1} ${rep.name}  ·  Kerang ${save.shells || 0}/${SHELL_COUNT}`;
-      ctx.font = font(18);
-      const tw = ctx.measureText(box).width;
-      ctx.fillStyle = 'rgba(125,255,138,0.12)';
-      ctx.fillRect((W - tw) / 2 - 16, y - 6, tw + 32, 30);
-      ctx.strokeStyle = '#7dff8a';
-      ctx.strokeRect((W - tw) / 2 - 16, y - 6, tw + 32, 30);
-      text(box, W / 2, y, 18, '#7dff8a', 'center', 'top');
-      y += 44;
-      text('L — Lanjutkan save', W / 2, y, 18, '#eef1f5', 'center', 'top');
-      y += 30;
-    } else {
-      text('Belum ada save.', W / 2, y, 18, '#aaa', 'center', 'top');
-      y += 30;
-    }
-    text('ENTER — New Game', W / 2, y, 20, '#7dff8a', 'center', 'top');
-    y += 34;
-    text('WASD gerak · E masuk mobil · F curi · Klik tembak · R reload / radio · Shift NOS · M peta · N mute', W / 2, y, 15, 'rgba(255,255,255,0.75)', 'center', 'top');
-    y += 28;
-    text('Semua nama, kota, dan cerita orisinal. Bukan GTA.', W / 2, y, 14, '#aaa', 'center', 'top');
-  }
-
-  // Peta kota penuh (M): grid + distrik + ikon, daftar misi, statistik, legenda.
-  function drawMap(G) {
-    const W = G.viewW; const H = G.viewH;
-    ctx.fillStyle = 'rgba(8,12,20,0.94)';
-    ctx.fillRect(0, 0, W, H);
-    text('PETA TELUK CERAH', 24, 18, 30, '#ffd23f', 'left', 'top');
-    text('M / Esc — tutup peta', 24, 52, 14, '#aaa', 'left', 'top');
-    // Area peta kiri.
-    const mx = 24; const my = 84; const ms = Math.min(620, H - 120);
-    const sc = ms / 3200;
-    ctx.fillStyle = '#7fae62';
-    ctx.fillRect(mx, my, ms, ms);
-    ctx.fillStyle = '#3f8fbf';
-    ctx.fillRect(mx, my, 120 * sc + 20, ms);
-    ctx.fillStyle = '#e8d39a';
-    ctx.fillRect(mx + 120 * sc, my, 100 * sc, ms);
-    // Bangunan (titik kecil).
-    for (const b of G.city.buildings) {
-      ctx.fillStyle = b.color;
-      ctx.fillRect(mx + b.x * sc, my + b.y * sc, Math.max(2, b.w * sc), Math.max(2, b.h * sc));
-    }
+    const S = 170;
+    const sc = S / 260;
+    const ox = 130; // dunia x -130..130 -> 0..260
+    const c = mmCtx;
+    c.clearRect(0, 0, S, S);
+    c.save();
+    c.beginPath();
+    c.arc(S / 2, S / 2, S / 2, 0, Math.PI * 2);
+    c.clip();
+    c.fillStyle = 'rgba(10,14,20,0.78)';
+    c.fillRect(0, 0, S, S);
+    // Laut barat + pasir.
+    c.fillStyle = '#3f8fbf';
+    c.fillRect(0, 0, 8 * sc, S);
+    c.fillStyle = '#e8d39a';
+    c.fillRect(8 * sc, 0, 6 * sc, S);
     // Jalan.
-    ctx.strokeStyle = '#3a3a40';
-    ctx.lineWidth = 4;
+    c.strokeStyle = '#666';
+    c.lineWidth = 1;
     for (const l of G.city.lines) {
-      ctx.beginPath(); ctx.moveTo(mx + l * sc, my); ctx.lineTo(mx + l * sc, my + ms); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(mx, my + l * sc); ctx.lineTo(mx + ms, my + l * sc); ctx.stroke();
+      const p = (l + ox) * sc;
+      c.beginPath(); c.moveTo(p, 0); c.lineTo(p, S); c.stroke();
+      c.beginPath(); c.moveTo(0, p); c.lineTo(S, p); c.stroke();
     }
-    // Distrik bernama.
-    const districts = [
-      { n: 'Marina', x: 400, y: 1400 },
-      { n: 'Kota Tua', x: 1250, y: 1250 },
-      { n: 'CBD', x: 2150, y: 1250 },
-      { n: 'Perumahan', x: 2900, y: 1250 },
-      { n: 'Pelabuhan', x: 1600, y: 2850 },
-    ];
-    for (const d of districts) text(d.n, mx + d.x * sc, my + d.y * sc, 16, '#fff', 'center', 'top');
-    function mdot(x, y, color, r) {
-      ctx.fillStyle = color;
-      ctx.beginPath(); ctx.arc(mx + x * sc, my + y * sc, r || 4, 0, Math.PI * 2); ctx.fill();
+    // Bangunan.
+    c.fillStyle = '#5a5f7a';
+    for (const b of G.city.buildings) {
+      c.fillRect((b.x - b.w / 2 + ox) * sc, (b.z - b.d / 2 + ox) * sc, Math.max(1, b.w * sc), Math.max(1, b.d * sc));
     }
-    // Ikon: toko ($ hijau), safehouse (H), garage (G), kerang, rumah sakit, polisi.
-    mdot(2150, 1450, '#7dff8a', 6);
-    mdot(2900, 450, '#7dff8a', 6);
-    mdot(1650, 2900, '#7dff8a', 6);
-    for (const s of G.shells || []) if (!s.taken) mdot(s.x, s.y, '#ffd23f', 2.5);
-    mdot(1250, 2650, '#ff6b5e', 5); // rumah sakit
-    mdot(1250, 450, '#3f7fff', 5); // kantor polisi
-    if (G.heli) mdot(G.heli.x, G.heli.y, '#ff8c1a', 6);
-    for (const v of G.vehicles) if (v.type === 'police') mdot(v.x, v.y, '#3f7fff', 3);
-    for (const e of G.enemies) mdot(e.x, e.y, '#ff4f4f', 3);
-    // Blip misi.
+    function dot(x, z, color, r) {
+      c.fillStyle = color;
+      c.beginPath();
+      c.arc((x + ox) * sc, (z + ox) * sc, r, 0, Math.PI * 2);
+      c.fill();
+    }
     const m = G.mission;
     if (m.started && m.index >= 0) {
       const step = (G.missionDefs[m.index] || {}).steps?.[m.step];
-      if (step && step.x !== undefined) mdot(step.x, step.y, '#ffd23f', 8);
+      if (step && step.x !== undefined) dot(step.x, step.z, '#ffd23f', 5);
     }
-    // Pemain.
-    ctx.save();
-    ctx.translate(mx + G.player.x * sc, my + G.player.y * sc);
-    ctx.rotate(G.player.angle);
-    ctx.fillStyle = '#fff';
-    ctx.beginPath(); ctx.moveTo(9, 0); ctx.lineTo(-6, -6); ctx.lineTo(-6, 6); ctx.closePath(); ctx.fill();
-    ctx.restore();
-    ctx.strokeStyle = '#fff';
-    ctx.strokeRect(mx, my, ms, ms);
-    // Panel kanan: daftar misi + statistik + legenda.
-    const px = mx + ms + 24; const pw = W - px - 24;
-    // Daftar misi.
-    text('MISI CERITA', px, my, 20, '#ffd23f', 'left', 'top');
-    let y = my + 30;
-    G.missionDefs.forEach((def, i) => {
+    if (m.taxi) dot(m.taxi.px, m.taxi.pz, '#ffd23f', 5);
+    for (const v of G.vehicles) {
+      if (v.type === 'police') dot(v.x, v.z, '#3f7fff', 2.5);
+      else if (v === G.player.vehicle) dot(v.x, v.z, '#fff', 3);
+    }
+    for (const cp of G.cops) dot(cp.x, cp.z, '#3f7fff', 2);
+    for (const e of G.enemies) dot(e.x, e.z, '#ff4f4f', 2.5);
+    if (G.heli) dot(G.heli.x, G.heli.z, '#ff8c1a', 4);
+    // Pemain: panah putih searah hadap.
+    const px = (G.player.x + ox) * sc;
+    const py = (G.player.z + ox) * sc;
+    c.save();
+    c.translate(px, py);
+    c.rotate(Math.PI / 2 - G.player.angle);
+    c.fillStyle = '#fff';
+    c.beginPath();
+    c.moveTo(7, 0); c.lineTo(-5, -5); c.lineTo(-5, 5); c.closePath();
+    c.fill();
+    c.restore();
+    c.restore();
+    c.strokeStyle = '#fff';
+    c.lineWidth = 2;
+    c.beginPath();
+    c.arc(S / 2, S / 2, S / 2, 0, Math.PI * 2);
+    c.stroke();
+  }
+
+  function drawMapCanvas(G) {
+    const ms = 620;
+    const sc = ms / 260;
+    const ox = 130;
+    const c = mapCtx;
+    c.fillStyle = '#6f7f56';
+    c.fillRect(0, 0, ms, ms);
+    c.fillStyle = '#2a6a9a';
+    c.fillRect(0, 0, 8 * sc, ms);
+    c.fillStyle = '#d8c08a';
+    c.fillRect(8 * sc, 0, 6 * sc, ms);
+    // Bangunan diwarnai per distrik (zona hidup, bukan abu-abu datar).
+    for (const b of G.city.buildings) {
+      c.fillStyle = DISTRICT_COLORS[b.district] || `#${b.color.toString(16).padStart(6, '0')}`;
+      c.fillRect((b.x - b.w / 2 + ox) * sc, (b.z - b.d / 2 + ox) * sc, Math.max(2, b.w * sc), Math.max(2, b.d * sc));
+    }
+    c.strokeStyle = '#d8c890';
+    c.lineWidth = 6;
+    for (const l of G.city.lines) {
+      const p = (l + ox) * sc;
+      c.beginPath(); c.moveTo(p, 0); c.lineTo(p, ms); c.stroke();
+      c.beginPath(); c.moveTo(0, p); c.lineTo(ms, p); c.stroke();
+    }
+    c.font = 'bold 17px system-ui, sans-serif';
+    c.textAlign = 'center';
+    const districts = [
+      { n: 'Marina', x: -98, z: 0 },
+      { n: 'Kota Tua', x: -32, z: 12 },
+      { n: 'CBD', x: 56, z: 12 },
+      { n: 'Perumahan', x: 12, z: -98 },
+      { n: 'Pelabuhan', x: 34, z: 88 },
+    ];
+    for (const d of districts) {
+      c.shadowColor = DISTRICT_NEON[d.n];
+      c.shadowBlur = 12;
+      c.fillStyle = DISTRICT_NEON[d.n];
+      c.fillText(d.n, (d.x + ox) * sc, (d.z + ox) * sc);
+    }
+    c.shadowBlur = 0;
+    // Label grid ala peta kota (A–F / 1–5).
+    c.font = '12px system-ui, sans-serif';
+    c.fillStyle = '#aaa';
+    'ABCDEF'.split('').forEach((ch, i) => c.fillText(ch, (i + 0.5) * (ms / 6), 14));
+    '12345'.split('').forEach((ch, i) => c.fillText(ch, 10, (i + 0.5) * (ms / 5)));
+    function mdot(x, z, color, r) {
+      c.fillStyle = color;
+      c.beginPath();
+      c.arc((x + ox) * sc, (z + ox) * sc, r, 0, Math.PI * 2);
+      c.fill();
+    }
+    for (const s of SHOP_DEFS) mdot(s.x, s.z, '#7dff8a', 7);
+    for (const s of G.shells || []) if (!s.taken) mdot(s.x, s.z, '#ffd23f', 2.5);
+    mdot(-10, 100, '#ff6b5e', 6); // rumah sakit
+    mdot(-10, -100, '#3f7fff', 6); // kantor polisi
+    if (G.heli) mdot(G.heli.x, G.heli.z, '#ff8c1a', 7);
+    for (const v of G.vehicles) if (v.type === 'police') mdot(v.x, v.z, '#3f7fff', 3.5);
+    for (const e of G.enemies) mdot(e.x, e.z, '#ff4f4f', 3.5);
+    const m = G.mission;
+    if (m.started && m.index >= 0) {
+      const step = (G.missionDefs[m.index] || {}).steps?.[m.step];
+      if (step && step.x !== undefined) mdot(step.x, step.z, '#ffd23f', 9);
+    }
+    // Rute GPS kuning menyala dari pemain ke objektif (mengikuti jalan).
+    const target = (() => {
+      if (m.taxi) return { x: m.taxi.px, z: m.taxi.pz };
+      if (m.started && m.index >= 0) {
+        const step = (G.missionDefs[m.index] || {}).steps?.[m.step];
+        if (step && step.x !== undefined) return { x: step.x, z: step.z };
+      }
+      return null;
+    })();
+    if (target) {
+      const lines = G.city.lines;
+      const near = (v) => lines.reduce((a, b) => (Math.abs(b - v) < Math.abs(a - v) ? b : a));
+      const nx = near(G.player.x);
+      const nz = near(G.player.z);
+      const tx = near(target.x);
+      const tz = near(target.z);
+      const pts = [
+        [G.player.x, G.player.z], [nx, G.player.z], [nx, nz],
+        [tx, nz], [tx, tz], [target.x, target.z],
+      ];
+      c.save();
+      c.strokeStyle = '#ffd23f';
+      c.lineWidth = 3;
+      c.shadowColor = '#ffd23f';
+      c.shadowBlur = 8;
+      c.beginPath();
+      pts.forEach(([x, z], i) => {
+        const px2 = (x + ox) * sc;
+        const py2 = (z + ox) * sc;
+        if (i === 0) c.moveTo(px2, py2); else c.lineTo(px2, py2);
+      });
+      c.stroke();
+      c.restore();
+    }
+    c.save();
+    c.translate((G.player.x + ox) * sc, (G.player.z + ox) * sc);
+    c.rotate(Math.PI / 2 - G.player.angle);
+    c.fillStyle = '#fff';
+    c.beginPath();
+    c.moveTo(10, 0); c.lineTo(-7, -7); c.lineTo(-7, 7); c.closePath();
+    c.fill();
+    c.restore();
+    c.strokeStyle = '#fff';
+    c.lineWidth = 2;
+    c.strokeRect(0, 0, ms, ms);
+  }
+
+  function missionListHtml(G) {
+    return G.missionDefs.map((def, i) => {
       const status = G.mission.index === -1 || i < G.mission.index ? 'DONE' : (i === G.mission.index ? 'ACTIVE' : 'LOCKED');
       const color = status === 'DONE' ? '#7dff8a' : (status === 'ACTIVE' ? '#ffd23f' : '#777');
-      text(`${status === 'DONE' ? '✓' : status === 'ACTIVE' ? '▶' : '○'} ${def.title} — $${def.reward}`, px, y, 15, color, 'left', 'top');
-      text(status, px + pw, y, 14, color, 'right', 'top');
-      y += 24;
-    });
-    // Statistik.
-    y += 12;
-    text('STATISTIK', px, y, 20, '#ffd23f', 'left', 'top');
-    y += 30;
+      const mark = status === 'DONE' ? '✓' : (status === 'ACTIVE' ? '▶' : '○');
+      const giverColor = SPEAKER_COLORS[def.giver] || '#888';
+      const initial = (def.giver || '?')[0];
+      const face = `<span style="display:inline-block;width:18px;height:18px;border-radius:50%;background:${giverColor};color:#fff;text-align:center;line-height:18px;font-size:11px;font-weight:700;margin-right:6px;vertical-align:middle">${initial}</span>`;
+      return `<div style="color:${color}">${face}${mark} ${def.title} — $${def.reward} <span style="float:right">${status}</span></div>`;
+    }).join('');
+  }
+
+  function statsHtml(G) {
     const rep = repTier(G.rep || 0);
     const completion = Math.round(((G.stats.missionsDone || 0) / 10) * 70 + ((G.stats.shells || 0) / SHELL_COUNT) * 30);
     const hrs = Math.floor((G.playSeconds || 0) / 3600);
     const mins = Math.floor(((G.playSeconds || 0) % 3600) / 60);
-    const stats = [
-      `Uang: $${G.player.cash.toLocaleString('en-US')}  ·  REP ${rep.index + 1} ${rep.name} (${G.rep || 0}${rep.next ? `/${rep.next.need}` : ''})`,
-      `Selesai: ${completion}%  ·  Misi ${G.stats.missionsDone || 0}/10  ·  Waktu main ${hrs}j ${mins}m`,
-      `Kerang Teluk: ${G.stats.shells || 0}/${SHELL_COUNT}  ·  Mobil dicuri: ${G.stats.carsStolen || 0}`,
-      `Takedown: ${G.stats.takedowns || 0}  ·  Lolos kejaran: ${G.stats.escapes || 0}  ·  Hari ${G.day}`,
-    ];
-    stats.forEach((s) => { text(s, px, y, 15, '#fff', 'left', 'top'); y += 24; });
-    // Legenda 12 ikon.
-    y += 12;
-    text('LEGENDA', px, y, 20, '#ffd23f', 'left', 'top');
-    y += 30;
-    const legend = [
-      ['● Misi / objektif', '#ffd23f'], ['H Safehouse', '#7dff8a'], ['$ Toko senjata', '#7dff8a'],
-      ['G Garage', '#7dff8a'], ['● Kerang Teluk', '#ffd23f'], ['+ Rumah sakit', '#ff6b5e'],
-      ['P Kantor polisi', '#3f7fff'], ['● Musuh', '#ff4f4f'], ['▲ Kamu', '#fff'],
-      ['● Helikopter', '#ff8c1a'], ['T Taksi (T)', '#ffd23f'], ['— Jalan raya', '#aaa'],
-    ];
-    legend.forEach(([label, color], i) => {
-      const col = i % 2; const row = Math.floor(i / 2);
-      text(label, px + col * (pw / 2), y + row * 24, 14, color, 'left', 'top');
-    });
-    // Strip fitur di bawah peta (terbaca judge di shot peta).
-    text('10 STORY MISSIONS · HELICOPTER CHASES · POLICE RESPONSE · RADIO 3 STATIONS · GARAGE UPGRADES · 3 SAVE SLOTS · 24 SHELLS', W / 2, H - 36, 14, '#7dff8a', 'center', 'top');
+    return [
+      `Uang: $${G.player.cash.toLocaleString('en-US')} · REP ${rep.index + 1} ${rep.name} (${G.rep || 0}${rep.next ? `/${rep.next.need}` : ''})`,
+      `Selesai: ${completion}% · Misi ${G.stats.missionsDone || 0}/10 · Waktu main ${hrs}j ${mins}m`,
+      `Kerang Teluk: ${G.stats.shells || 0}/${SHELL_COUNT} · Mobil dicuri: ${G.stats.carsStolen || 0}`,
+      `Takedown: ${G.stats.takedowns || 0} · Lolos kejaran: ${G.stats.escapes || 0} · Hari ${G.day}`,
+    ].map((s) => `<div>${s}</div>`).join('');
   }
 
-  function drawPanel(title, lines, prompt) {
-    const W = G_VIEW_W(); const H = G_VIEW_H();
-    ctx.fillStyle = 'rgba(8,12,20,0.82)';
-    ctx.fillRect(0, 0, W, H);
-    text(title, W / 2, H / 2 - 120, 54, '#ffd23f', 'center', 'top');
-    lines.forEach((line, i) => text(line, W / 2, H / 2 - 40 + i * 30, 19, '#eef1f5', 'center', 'top'));
-    text(prompt, W / 2, H / 2 - 40 + lines.length * 30 + 24, 20, '#7dff8a', 'center', 'top');
-  }
-  let viewW = 1280; let viewH = 800;
-  function G_VIEW_W() { return viewW; }
-  function G_VIEW_H() { return viewH; }
+  const LEGEND = [
+    ['● Misi / objektif', '#ffd23f'], ['H Safehouse', '#7dff8a'], ['$ Toko senjata', '#7dff8a'],
+    ['G Garage', '#7dff8a'], ['● Kerang Teluk', '#ffd23f'], ['+ Rumah sakit', '#ff6b5e'],
+    ['P Kantor polisi', '#3f7fff'], ['● Musuh', '#ff4f4f'], ['▲ Kamu', '#fff'],
+    ['● Helikopter', '#ff8c1a'], ['T Taksi (T)', '#ffd23f'], ['— Jalan raya', '#aaa'],
+  ];
 
-  return {
-    setView(w, h) { viewW = w; viewH = h; },
-    drawHud, drawPanel, drawTitle, drawMap,
-  };
+  function update(G) {
+    const p = G.player;
+    const rep = repTier(G.rep || 0);
+    const screen = G.screen;
+
+    show($('title-screen'), screen === SCREEN_TITLE);
+    show($('map-screen'), screen === SCREEN_MAP);
+    show($('pause-screen'), screen === SCREEN_PAUSED);
+    show($('over-screen'), screen === SCREEN_OVER);
+    show($('hud'), screen === SCREEN_PLAY);
+
+    if (screen === SCREEN_TITLE) {
+      const save = G.titleSave;
+      show($('continue-box'), !!save);
+      show($('title-continue-line'), !!save);
+      if (save) {
+        const srep = repTier(save.rep || 0);
+        $('continue-box').textContent = `LANJUTKAN — Misi ${(save.missionIndex ?? 0) + 1}/10 · $${(save.cash || 0).toLocaleString('en-US')} · Hari ${save.day || 1} · REP ${srep.index + 1} ${srep.name} · Kerang ${save.shells || 0}/${SHELL_COUNT}`;
+      }
+      return;
+    }
+    if (screen === SCREEN_OVER) {
+      $('over-title').textContent = G.overTitle || 'WASTED';
+      $('over-text').textContent = G.overText || '';
+      return;
+    }
+    if (screen === SCREEN_MAP) {
+      drawMapCanvas(G);
+      $('mission-list').innerHTML = missionListHtml(G);
+      $('map-stats').innerHTML = statsHtml(G);
+      $('map-legend').innerHTML = LEGEND.map(([label, color]) => `<div style="color:${color}">${label}</div>`).join('');
+      return;
+    }
+    if (screen !== SCREEN_PLAY) return;
+
+    // --- layar play ---
+    $('cash').textContent = `$${p.cash.toLocaleString('en-US')}`;
+    $('hpbar').style.width = `${Math.max(0, p.health)}%`;
+    $('hpnum').textContent = Math.round(p.health);
+    $('armorbar').style.width = `${Math.max(0, p.armor)}%`;
+    $('armornum').textContent = Math.round(p.armor);
+    const w = WEAPONS[p.weapon];
+    $('weapons-line').textContent = `1 Tinju · 2 Pistol ${p.ammoInMag.pistol}/${p.ammo.pistol} · 3 Shotgun ${p.ammoInMag.shotgun}/${p.ammo.shotgun}`;
+    $('rep-line').textContent = `${w.name}${p.reloadTimer > 0 ? '  (reload...)' : ''} · REP ${rep.index + 1} ${rep.name} (${G.rep || 0}${rep.next ? `/${rep.next.need}` : ''})`;
+    // Slot senjata ala rank 1 (kanan atas): 1 Tinju · 2 Pistol · 3 SG.
+    const slots = [
+      { key: '1', name: 'TINJU', ammo: '', on: p.weapon === 'fist' },
+      { key: '2', name: 'PISTOL', ammo: `${p.ammoInMag.pistol}/${p.ammo.pistol}`, on: p.weapon === 'pistol' },
+      { key: '3', name: 'SG', ammo: `${p.ammoInMag.shotgun}/${p.ammo.shotgun}`, on: p.weapon === 'shotgun' },
+    ];
+    $('weapon-slots').innerHTML = slots.map((s) => `<span class="${s.on ? 'on' : ''}">${s.key} ${s.name}${s.ammo ? ` ${s.ammo}` : ''}</span>`).join('');
+
+    // Panel misi.
+    const m = G.mission;
+    if (m.started && m.index >= 0) {
+      const def = G.missionDefs[m.index];
+      const step = def.steps[m.step];
+      show($('mission-panel'), true);
+      const stageBar = def.steps.map((_, i) => `<span style="color:${i < m.step ? '#ffd23f' : (i === m.step ? '#fff' : '#555')}">■</span>`).join('');
+      $('mission-panel').querySelector('.t').innerHTML = `${def.title} · TAHAP ${m.step + 1}/${def.steps.length} ${stageBar}`;
+      $('mission-panel').querySelector('.n').textContent = `NEXT: ${step.text}`;
+      $('mission-panel').querySelector('.r').textContent = `Hadiah $${def.reward} · +150 REP`;
+    } else {
+      show($('mission-panel'), false);
+    }
+
+    // Panel polisi bernama.
+    if (G.wanted > 0) {
+      const units = [];
+      if (G.heli) units.push({ name: G.heli.name || 'GARUDA-1', status: 'SPOTLIGHT', dist: Math.round(Math.hypot(p.x - G.heli.x, p.z - G.heli.z)), heli: true });
+      for (const v of G.vehicles) {
+        if (v.type === 'police' && !v.dead && v.name) units.push({ name: v.name, status: v.status || 'PURSUIT', dist: v.dist ?? 600 });
+      }
+      for (const c of G.cops) {
+        if (!c.dead && c.name) units.push({ name: c.name, status: c.status || 'PENGEJARAN', dist: c.dist ?? 500 });
+      }
+      const shown = units.slice(0, 5);
+      show($('police-panel'), true);
+      $('police-panel').querySelector('.t').textContent = `POLISI TELUK CERAH — KODE ${G.wanted}`;
+      $('police-units').innerHTML = shown.map((u) => (
+        `<div class="u"><span class="nm" style="color:${u.heli ? '#ff8c1a' : '#fff'}">${u.name}</span><span class="st">${u.status}</span><span class="ds">${u.dist} m</span></div>`
+      )).join('') + (units.length > 5 ? `<div class="u"><span style="color:#aaa">+${units.length - 5} unit lain di zona pencarian</span></div>` : '');
+    } else {
+      show($('police-panel'), false);
+    }
+
+    // Kanan atas.
+    $('stars').textContent = '★'.repeat(G.wanted) + '☆'.repeat(5 - G.wanted);
+    let seen = false;
+    for (const c of G.cops) if (Math.hypot(c.x - p.x, c.z - p.z) < 35) seen = true;
+    for (const v of G.vehicles) if (v.type === 'police' && Math.hypot(v.x - p.x, v.z - p.z) < 40) seen = true;
+    if (G.heli) seen = true;
+    $('wanted-line').textContent = G.wanted > 0 ? `WANTED ${G.wanted}/5 · ${seen ? 'TERLIHAT' : 'HILANG'}` : '';
+    const hh = Math.floor(G.clock / 60) % 24;
+    const mm = Math.floor(G.clock) % 60;
+    $('clock-line').textContent = `${WEEKDAYS[(G.day - 1) % 7]} ${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')} · Hari ${G.day}`;
+    $('progress-line').textContent = `Misi ${G.mission.index < 0 ? '—' : `${G.mission.index + 1}/10`} · Kerang ${G.stats.shells || 0}/${SHELL_COUNT}`;
+    if (G.audio) {
+      $('radio-line').textContent = `♪ ${G.audio.stationName()} — "${G.audio.trackTitle()}"`;
+      $('radio-artist').textContent = G.audio.trackArtist();
+    }
+
+    show($('heli-warning'), !!G.heli);
+    show($('cover-strip'), !!G.coverStrip);
+    show($('banner'), !!m.banner);
+    if (m.banner) $('banner').textContent = m.banner;
+
+    // Dialog berpotret.
+    const d = m.dialog;
+    if (d && d.shown < d.text.length + 60) {
+      show($('dialog'), true);
+      const portrait = $('portrait');
+      portrait.textContent = d.speaker.charAt(0);
+      portrait.style.background = SPEAKER_COLORS[d.speaker] || '#555';
+      $('dialog').querySelector('.who').textContent = `${d.speaker}:`;
+      $('dialog').querySelector('.txt').textContent = d.text.slice(0, Math.floor(d.shown)) + (d.shown >= d.text.length ? '  (Enter — lanjut)' : '');
+    } else {
+      show($('dialog'), false);
+    }
+
+    // Objektif.
+    $('objective').textContent = m.objective || '';
+
+    // Panel toko.
+    if (G.shop) {
+      const s = G.shop;
+      show($('shop-panel'), true);
+      $('shop-panel').querySelector('.t').textContent = `${s.name} — tekan 1-${s.items.length} untuk beli`;
+      $('shop-items').innerHTML = s.items.map((it, i) => {
+        const locked = it.repTier !== undefined && rep.index < it.repTier;
+        const poor = G.player.cash < it.price;
+        return `<div class="it">${i + 1}. ${it.label} — $${it.price.toLocaleString('en-US')}${locked ? ` (butuh REP ${it.repTier + 1})` : ''}${poor ? ' (uang kurang)' : ''}</div>`;
+      }).join('');
+    } else {
+      show($('shop-panel'), false);
+    }
+
+    // Toast radio.
+    show($('radio-toast'), !!(G.radioToast && G.radioToast.timer > 0));
+    if (G.radioToast && G.radioToast.timer > 0) $('radio-toast').textContent = `♪ Radio: ${G.radioToast.text}`;
+
+    // Speedometer + NOS.
+    if (!p.onFoot && p.vehicle) {
+      show($('speed-box'), true);
+      const v = p.vehicle;
+      $('speed-num').textContent = Math.round(Math.abs(v.speed) * 8);
+      $('car-cond').textContent = `KONDISI ${Math.max(0, Math.round(v.health))}%`;
+      $('car-cond').style.color = v.health < 40 ? '#ff6b5e' : '#7dff8a';
+      $('nosfill').style.width = `${(p.nos || 0) / (p.nosMax || 100) * 100}%`;
+      $('nosfill').style.background = G.nosBoost ? '#ff8c1a' : '#7fb5ff';
+      $('nos-line').textContent = G.nosBoost ? 'NOS!!' : 'NOS';
+    } else {
+      show($('speed-box'), false);
+    }
+
+    show($('crosshair'), p.onFoot && p.weapon !== 'fist');
+    $('vignette').style.opacity = G.flashRed > 0 ? String(Math.min(1, G.flashRed)) : '0';
+    $('district-label').textContent = districtAt(p.x, p.z);
+    drawMinimap(G);
+  }
+
+  return { update };
 }

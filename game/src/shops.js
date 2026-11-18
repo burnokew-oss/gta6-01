@@ -1,14 +1,14 @@
-// Toko + safehouse + garage Teluk Cerah. Semua transaksi pakai cash pemain
-// yang sudah ada; tidak ada mata uang baru, tidak ada dialog baru yang
-// wajib dilewati — panel harga muncul saat pemain mendekat, beli pakai 1/2/3.
+// Toko + safehouse + garage Teluk Cerah. Semua transaksi pakai cash
+// pemain yang sudah ada; panel harga muncul saat pemain mendekat,
+// beli pakai tombol 1-5.
 import { LOCATIONS, GARAGE_UPGRADES, REP_TIERS, repTier } from './config.js';
 
-// Definisi toko: lokasi, radius interaksi, dan daftar barang.
-// apply(G) mengembalikan true bila pembelian berhasil (uang cukup + efek
-// memang bisa diterapkan), false bila tidak.
+// Definisi toko: lokasi (x, z), radius interaksi, dan daftar barang.
+// apply(G) mengembalikan true bila pembelian berhasil (efek memang bisa
+// diterapkan), false bila tidak.
 export const SHOP_DEFS = [
   {
-    id: 'gun', name: 'Toko Senjata "Siaga"', icon: '$', ...LOCATIONS.cbdShop, r: 100,
+    id: 'gun', name: 'Toko Senjata "Siaga"', icon: '$', ...LOCATIONS.cbdShop, r: 9,
     hint: 'Dekat toko senjata — tekan 1/2/3 untuk beli',
     items: [
       { label: 'Ammo Pistol x24', price: 40, apply(G) { G.player.ammo.pistol += 24; return true; } },
@@ -17,7 +17,7 @@ export const SHOP_DEFS = [
     ],
   },
   {
-    id: 'safehouse', name: 'Safehouse Perumahan', icon: 'H', ...LOCATIONS.eastSafehouse, r: 110,
+    id: 'safehouse', name: 'Safehouse Perumahan', icon: 'H', ...LOCATIONS.eastSafehouse, r: 10,
     hint: 'Dekat safehouse — tekan 1 untuk sembuh + save, 2 untuk istirahat',
     items: [
       { label: 'Sembuh penuh + save', price: 50, apply(G) { G.player.health = 100; G.player.armor = Math.max(G.player.armor, 25); G.saveNow = true; return true; } },
@@ -25,11 +25,11 @@ export const SHOP_DEFS = [
     ],
   },
   {
-    id: 'garage', name: 'Garage "Bengkel Dimas"', icon: 'G', ...LOCATIONS.portGate, r: 110,
+    id: 'garage', name: 'Garage "Bengkel Dimas"', icon: 'G', ...LOCATIONS.portGate, r: 10,
     hint: 'Dekat garage (di mobil) — tekan 1-5 untuk beli upgrade',
     items: [
       { label: 'Repair mobil penuh', price: 60, apply(G) { const v = G.player.vehicle; if (!v) return false; v.health = 100; v.smoking = false; return true; } },
-      { label: 'Repaint — warna baru + hapus wanted', price: 100, apply(G) { const v = G.player.vehicle; if (!v) return false; v.color = G.rng.pick(['#c22e2e', '#2e8a5b', '#8a5ec2', '#e8a020', '#4a7fb5', '#e5534b']); G.wanted = 0; G.heli = null; return true; } },
+      { label: 'Repaint — warna baru + hapus wanted', price: 100, apply(G) { const v = G.player.vehicle; if (!v) return false; v.color = G.rng.pick([0xc22e2e, 0x2e8a5b, 0x8a5ec2, 0xe8a020, 0x4a7fb5, 0xe5534b]); G.wanted = 0; G.heli = null; return true; } },
       { label: `Mesin Balap — ${GARAGE_UPGRADES.engine.desc}`, price: GARAGE_UPGRADES.engine.price, repTier: GARAGE_UPGRADES.engine.repTier, apply(G) { if (G.player.upgrades.engine) return false; G.player.upgrades.engine = true; G.player.engineLevel = 1; return true; } },
       { label: `Pelat Baja — ${GARAGE_UPGRADES.armor.desc}`, price: GARAGE_UPGRADES.armor.price, repTier: GARAGE_UPGRADES.armor.repTier, apply(G) { if (G.player.upgrades.armor) return false; G.player.upgrades.armor = true; G.player.armor = 100; return true; } },
       { label: `Nitro Ganda — ${GARAGE_UPGRADES.nitro.desc}`, price: GARAGE_UPGRADES.nitro.price, repTier: GARAGE_UPGRADES.nitro.repTier, apply(G) { if (G.player.upgrades.nitro) return false; G.player.upgrades.nitro = true; G.player.nosMax = 200; G.player.nos = 200; return true; } },
@@ -43,7 +43,7 @@ export function updateShops(G) {
   G.shop = null;
   for (const s of SHOP_DEFS) {
     if (s.id === 'garage' && p.onFoot) continue;
-    if (Math.hypot(p.x - s.x, p.y - s.y) < s.r) {
+    if (Math.hypot(p.x - s.x, p.z - s.z) < s.r) {
       G.shop = s;
       return;
     }
@@ -71,7 +71,7 @@ export function buyShopItem(G, index) {
     return false;
   }
   G.player.cash -= item.price;
-  G.cashFloaters.push({ x: G.player.x, y: G.player.y - 40, text: `-$${item.price}`, life: 1.2 });
+  G.cashFloaters.push({ x: G.player.x, z: G.player.z, text: `-$${item.price}`, life: 1.2 });
   G.mission.banner = `Dibeli: ${item.label}  -$${item.price}`;
   G.mission.bannerTimer = 0;
   if (G.audio) G.audio.pickup();

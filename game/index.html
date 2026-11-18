@@ -3,17 +3,200 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Teluk Cerah — 10 Story Missions, Helicopter Chases, Radio, Garage Upgrades & Saves | Open-World Crime 2D</title>
+<title>Teluk Cerah — 10 Story Missions, Helicopter Chases, Radio, Garage Upgrades &amp; Saves | Open-World Crime 3D</title>
 <style>
-  html, body { margin: 0; height: 100%; overflow: hidden; background: #0a0e14; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #0a0e14; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
   #game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; cursor: crosshair; }
-  /* Read aloud, never shown: the status line screen readers announce. */
   #status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  #hud { position: fixed; inset: 0; pointer-events: none; color: #fff; text-shadow: 0 1px 3px #000; z-index: 5; }
+  .panel { position: absolute; background: rgba(0,0,0,0.5); border-radius: 6px; padding: 8px 12px; line-height: 1.45; }
+  #panel-left { top: 10px; left: 10px; width: 300px; }
+  #cash { font-size: 24px; font-weight: 700; color: #7dff8a; }
+  .barwrap { display: flex; align-items: center; gap: 6px; font-size: 13px; }
+  .bar { flex: 1; height: 10px; background: #111; border: 1px solid #000; }
+  .bar > i { display: block; height: 100%; }
+  #weapons-line, #rep-line { font-size: 13px; }
+  #rep-line { color: #ffd23f; }
+  #mission-panel { top: 156px; left: 10px; width: 300px; border: 1px solid #ffd23f; }
+  #mission-panel .t { color: #ffd23f; font-size: 15px; font-weight: 700; }
+  #mission-panel .s { font-size: 14px; letter-spacing: 4px; line-height: 1.2; }
+  #mission-panel .n { font-size: 14px; }
+  #mission-panel .r { color: #7dff8a; font-size: 13px; }
+  #police-panel { top: 246px; left: 10px; width: 300px; border: 1px solid #3f7fff; background: rgba(10,14,40,0.72); }
+  #police-panel .t { color: #7fb5ff; font-size: 14px; font-weight: 700; }
+  #police-panel .u { display: flex; font-size: 13px; }
+  #police-panel .u .nm { width: 118px; }
+  #police-panel .u .st { flex: 1; color: #ffd23f; }
+  #police-panel .u .ds { color: #aaa; }
+  #panel-right { top: 10px; right: 10px; text-align: right; background: none; padding: 0; max-width: 460px; }
+  #weapon-slots { margin-top: 6px; }
+  #weapon-slots span { display: inline-block; border: 1px solid #666; background: rgba(0,0,0,0.55); padding: 2px 7px; margin-left: 4px; font-size: 12px; border-radius: 3px; color: #ddd; }
+  #weapon-slots span.on { border-color: #ffd23f; color: #ffd23f; background: rgba(255,210,63,0.15); }
+  #stars { font-size: 26px; letter-spacing: 3px; color: #ffd23f; }
+  #wanted-line { font-size: 15px; color: #ff6b5e; }
+  #clock-line { font-size: 18px; }
+  #progress-line { font-size: 14px; color: #ffd23f; }
+  #radio-line { font-size: 14px; color: #7dff8a; }
+  #radio-artist { font-size: 13px; color: #ddd; }
+  #heli-warning { top: 168px; left: 50%; transform: translateX(-50%); background: rgba(120,0,0,0.65); font-size: 22px; font-weight: 700; color: #ff6b5e; padding: 4px 16px; }
+  #cover-strip { top: 300px; left: 340px; background: rgba(0,0,0,0.62); font-size: 14px; color: #7dff8a; white-space: nowrap; }
+  #banner { top: 110px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.6); font-size: 30px; font-weight: 700; color: #ffd23f; white-space: nowrap; }
+  #objective { bottom: 96px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.55); font-size: 17px; white-space: nowrap; max-width: 90vw; overflow: hidden; text-overflow: ellipsis; }
+  #dialog { bottom: 190px; left: 50%; transform: translateX(-50%); width: 640px; background: rgba(10,14,20,0.85); border: 1px solid #ffd23f; display: flex; gap: 12px; padding: 10px 14px; }
+  #portrait { width: 52px; height: 52px; border-radius: 50%; border: 2px solid #fff; flex: none; display: flex; align-items: center; justify-content: center; font-size: 26px; font-weight: 700; }
+  #dialog .who { color: #ffd23f; font-size: 17px; font-weight: 700; }
+  #dialog .txt { font-size: 16px; line-height: 1.4; }
+  #shop-panel { left: 10px; bottom: 230px; width: 560px; background: rgba(10,14,20,0.88); border: 1px solid #7dff8a; }
+  #shop-panel .t { color: #7dff8a; font-size: 16px; font-weight: 700; }
+  #shop-panel .it { font-size: 15px; }
+  #radio-toast { top: 250px; left: 50%; transform: translateX(-50%); font-size: 18px; color: #7dff8a; background: none; }
+  #speed-box { right: 16px; bottom: 16px; text-align: right; background: none; padding: 0; }
+  #speed-num { font-size: 40px; font-weight: 700; line-height: 1; }
+  #speed-unit { font-size: 16px; color: #aaa; }
+  #car-cond { font-size: 14px; color: #7dff8a; }
+  #nos-line { font-size: 14px; color: #7fb5ff; }
+  #nos-bar { width: 200px; height: 10px; background: #111; border: 1px solid #000; margin-left: auto; }
+  #nos-bar > i { display: block; height: 100%; background: #7fb5ff; }
+  #minimap-wrap { left: 14px; bottom: 14px; background: none; padding: 0; text-align: center; }
+  #minimap { border: 2px solid rgba(255,255,255,0.55); border-radius: 50%; background: rgba(0,0,0,0.35); display: block; }
+  #district-label { font-size: 14px; margin-top: 4px; }
+  #crosshair { left: 50%; top: 50%; width: 20px; height: 20px; margin: -10px 0 0 -10px; background: none; padding: 0; }
+  #crosshair::before, #crosshair::after { content: ""; position: absolute; background: #fff; }
+  #crosshair::before { left: 9px; top: 0; width: 2px; height: 20px; }
+  #crosshair::after { left: 0; top: 9px; width: 20px; height: 2px; }
+  #hint { bottom: 2px; left: 50%; transform: translateX(-50%); font-size: 13px; color: rgba(255,255,255,0.6); background: none; white-space: nowrap; }
+  #vignette { position: fixed; inset: 0; background: rgba(200,30,30,0.35); opacity: 0; pointer-events: none; z-index: 6; }
+  .overlay { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; z-index: 10; pointer-events: none; }
+  #title-screen { background: rgba(8,12,20,0.55); color: #fff; }
+  #title-screen h1 { margin: 0; font-size: 76px; font-weight: 800; letter-spacing: 4px; background: linear-gradient(90deg, #ff8c1a, #ff5e8a, #37c8e8); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  #title-screen .sub { font-size: 18px; letter-spacing: 2px; color: #eef1f5; margin-top: 6px; }
+  #title-screen .tag { font-size: 17px; color: #ffd23f; margin-top: 10px; }
+  #crew { display: flex; gap: 60px; margin-top: 26px; }
+  #crew .c { text-align: center; }
+  #crew .face { width: 68px; height: 68px; border-radius: 50%; border: 2px solid #fff; display: flex; align-items: center; justify-content: center; font-size: 30px; font-weight: 700; margin: 0 auto; }
+  #crew .nm { font-size: 16px; margin-top: 8px; }
+  #crew .rl { font-size: 13px; color: #aaa; }
+  #continue-box { margin-top: 30px; font-size: 18px; color: #7dff8a; background: rgba(125,255,138,0.12); border: 1px solid #7dff8a; padding: 8px 16px; max-width: 620px; text-align: center; }
+  #title-menu { margin-top: 22px; font-size: 20px; color: #7dff8a; line-height: 1.9; }
+  #howto { position: absolute; right: 36px; top: 50%; transform: translateY(-50%); text-align: left; background: rgba(8,12,20,0.72); border: 1px solid #37c8e8; border-radius: 8px; padding: 14px 18px; font-size: 14px; line-height: 1.9; color: #eef1f5; }
+  #howto h2 { color: #37c8e8; font-size: 17px; margin: 0 0 6px; letter-spacing: 2px; }
+  #howto b { color: #ffd23f; display: inline-block; min-width: 74px; }
+  #title-foot { margin-top: 14px; font-size: 14px; color: #aaa; }
+  #map-screen { background: rgba(8,12,20,0.94); flex-direction: row; align-items: flex-start; justify-content: flex-start; padding: 18px 24px; text-align: left; gap: 24px; color: #fff; }
+  #map-left { flex: none; }
+  #map-title { font-size: 30px; color: #ffd23f; font-weight: 700; }
+  #map-hint { font-size: 14px; color: #aaa; margin: 4px 0 10px; }
+  #mapcanvas { border: 2px solid #fff; display: block; background: #557a45; }
+  #map-right { flex: 1; min-width: 420px; }
+  #map-right h2 { color: #ffd23f; font-size: 20px; margin: 8px 0 6px; }
+  #mission-list div { font-size: 15px; line-height: 1.65; }
+  #map-stats div { font-size: 15px; line-height: 1.65; }
+  #map-legend { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 18px; font-size: 14px; line-height: 1.7; }
+  #map-strip { margin-top: 14px; font-size: 14px; color: #7dff8a; }
+  #pause-screen, #over-screen { background: rgba(8,12,20,0.82); }
+  #pause-screen h1, #over-screen h1 { font-size: 54px; color: #ffd23f; margin: 0 0 16px; }
+  #pause-screen div, #over-screen div { font-size: 19px; line-height: 1.9; color: #eef1f5; }
+  #pause-screen .go, #over-screen .go { color: #7dff8a; font-size: 20px; margin-top: 14px; }
+  #fallback { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: #141021; color: #fff; z-index: 20; text-align: center; padding: 24px; }
+  #fallback h1 { color: #ffd23f; }
+  .hidden { display: none !important; }
 </style>
 </head>
 <body>
-<canvas id="game" aria-label="Teluk Cerah: open-world crime 2D top-down. 10 misi cerita, helikopter polisi, radio 3 stasiun, toko, safehouse, garage dan NOS. WASD untuk bergerak, E masuk mobil, F curi mobil, klik kiri untuk menyerang."></canvas>
+<canvas id="game" aria-label="Teluk Cerah: open-world crime 3D. 10 misi cerita, helikopter polisi, radio 3 stasiun, toko, safehouse, garage dan NOS. WASD untuk bergerak, E masuk mobil, F curi mobil, klik kiri untuk menyerang."></canvas>
 <p id="status" role="status" aria-live="polite"></p>
+<div id="hud">
+  <div id="panel-left" class="panel">
+    <div id="cash">$100</div>
+    <div class="barwrap">HP <div class="bar"><i id="hpbar" style="width:100%;background:#e5534b"></i></div><span id="hpnum">100</span></div>
+    <div class="barwrap">ARMOR <div class="bar"><i id="armorbar" style="width:0%;background:#7fb5ff"></i></div><span id="armornum">0</span></div>
+    <div id="weapons-line">1 Tinju · 2 Pistol 12/12 · 3 Shotgun 0/0</div>
+    <div id="rep-line">REP 1 Anak Baru (0)</div>
+  </div>
+  <div id="mission-panel" class="panel hidden"><div class="t"></div><div class="s"></div><div class="n"></div><div class="r"></div></div>
+  <div id="police-panel" class="panel hidden"><div class="t"></div><div id="police-units"></div></div>
+  <div id="panel-right" class="panel">
+    <div id="stars">☆☆☆☆☆</div>
+    <div id="wanted-line"></div>
+    <div id="weapon-slots"></div>
+    <div id="clock-line">Jum 08:00 · Hari 1</div>
+    <div id="progress-line">Misi 1/10 · Kerang 0/24</div>
+    <div id="radio-line">♪ Pantai FM — "Senja di Teluk"</div>
+    <div id="radio-artist">Lagu Raya</div>
+  </div>
+  <div id="heli-warning" class="panel hidden">HELIKOPTER POLISI DI ATAS!</div>
+  <div id="cover-strip" class="panel hidden">10 STORY MISSIONS · HELICOPTER CHASES · POLICE RESPONSE · RADIO 3 STATIONS · GARAGE UPGRADES · 3 SAVE SLOTS · 24 SHELLS</div>
+  <div id="banner" class="panel hidden"></div>
+  <div id="dialog" class="panel hidden"><div id="portrait">B</div><div><div class="who"></div><div class="txt"></div></div></div>
+  <div id="objective" class="panel"></div>
+  <div id="shop-panel" class="panel hidden"><div class="t"></div><div id="shop-items"></div></div>
+  <div id="radio-toast" class="panel hidden"></div>
+  <div id="speed-box" class="panel hidden">
+    <div id="nos-line">NOS</div>
+    <div id="nos-bar"><i id="nosfill" style="width:100%"></i></div>
+    <div id="car-cond">KONDISI 100%</div>
+    <div><span id="speed-num">0</span> <span id="speed-unit">KM/J</span></div>
+  </div>
+  <div id="minimap-wrap" class="panel"><canvas id="minimap" width="170" height="170"></canvas><div id="district-label">Marina</div></div>
+  <div id="crosshair" class="panel hidden"></div>
+  <div id="hint" class="panel">WASD gerak · E masuk mobil · F curi · Klik tembak · R reload / radio (di mobil) · Shift NOS · M peta · N mute · Esc pause</div>
+</div>
+<div id="vignette"></div>
+
+<div id="title-screen" class="overlay hidden">
+  <h1>TELUK CERAH</h1>
+  <div class="sub">OPEN-WORLD CRIME 3D · 10 MISI · HELIKOPTER · RADIO · GARAGE</div>
+  <div class="tag">Tiga tahun merantau, Raka pulang ke Teluk Cerah.</div>
+  <div id="crew">
+    <div class="c"><div class="face" style="background:#2e6fb5">R</div><div class="nm">Raka</div><div class="rl">Protagonis</div></div>
+    <div class="c"><div class="face" style="background:#e8a020">B</div><div class="nm">Bu Sari</div><div class="rl">Fixer</div></div>
+    <div class="c"><div class="face" style="background:#2e8a5b">D</div><div class="nm">Dimas</div><div class="rl">Mekanik</div></div>
+    <div class="c"><div class="face" style="background:#8a5ec2">N</div><div class="nm">Nadia</div><div class="rl">Pembalap</div></div>
+  </div>
+  <div id="continue-box" class="hidden"></div>
+  <div id="title-menu">ENTER — New Game<br><span id="title-continue-line" class="hidden">L — Lanjutkan save</span></div>
+  <div id="howto"><h2>HOW TO PLAY</h2><div><b>WASD</b> Walk / drive</div><div><b>Mouse</b> Aim · Click to shoot</div><div><b>Shift</b> Sprint / NOS</div><div><b>F</b> Enter / steal vehicle</div><div><b>E</b> Interact · next</div><div><b>R</b> Reload · radio (di mobil)</div><div><b>M</b> City map</div><div><b>Esc</b> Pause</div></div>
+  <div id="title-foot">WASD gerak · E masuk mobil · F curi · Klik tembak · R reload / radio · Shift NOS · M peta · N mute<br>Semua nama, kota, dan cerita orisinal. Bukan GTA.</div>
+</div>
+
+<div id="map-screen" class="overlay hidden">
+  <div id="map-left">
+    <div id="map-title">PETA TELUK CERAH</div>
+    <div id="map-hint">M / Esc — tutup peta</div>
+    <canvas id="mapcanvas" width="620" height="620"></canvas>
+  </div>
+  <div id="map-right">
+    <h2>MISI CERITA</h2>
+    <div id="mission-list"></div>
+    <h2>STATISTIK</h2>
+    <div id="map-stats"></div>
+    <h2>LEGENDA</h2>
+    <div id="map-legend"></div>
+    <div id="map-strip">10 STORY MISSIONS · HELICOPTER CHASES · POLICE RESPONSE · RADIO 3 STATIONS · GARAGE UPGRADES · 3 SAVE SLOTS · 24 SHELLS</div>
+  </div>
+</div>
+
+<div id="pause-screen" class="overlay hidden">
+  <h1>Paused</h1>
+  <div>S — simpan ke slot 1<br>M — peta kota<br>Q — kembali ke title<br>N — mute</div>
+  <div class="go">Esc — lanjut main</div>
+</div>
+
+<div id="over-screen" class="overlay hidden">
+  <h1 id="over-title">WASTED</h1>
+  <div id="over-text"></div>
+  <div class="go">ENTER — bangkit lagi</div>
+</div>
+
+<div id="fallback" class="hidden">
+  <div>
+    <h1>TELUK CERAH</h1>
+    <p>Browser ini tidak menyediakan WebGL, jadi kota 3D tidak bisa dibuka.<br>
+    Silakan mainkan di desktop Chrome dengan akselerasi grafis aktif.</p>
+  </div>
+</div>
+
+<script src="./vendor/three.min.js"></script>
 <script type="module" src="./src/main.js"></script>
 </body>
 </html>

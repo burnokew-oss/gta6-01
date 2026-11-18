@@ -1,37 +1,43 @@
 // Helikopter polisi "GARUDA-1": muncul di wanted >= 3, terbang mengikuti
-// pemain dari atas-belakang, menyorot dengan spotlight, suara rotor,
-// dan sedikit guncangan kamera saat dekat. Hilang saat wanted turun.
-import { HELI_MIN_WANTED, HELI_SPEED, HELI_HOVER_DIST, HELI_NAME } from './config.js';
+// pemain dari atas-depan, menyorot dengan spotlight, dan bikin kamera
+// sedikit bergetar saat dekat. Hilang saat wanted turun di bawah 3.
+//
+// Posisi heli disimpan di bidang XZ + ketinggian y (12-16 unit) —
+// renderer menggambar bodi, rotor berputar, kerucut sorot, dan lingkaran
+// cahaya di tanah di bawahnya.
+import { HELI_MIN_WANTED, HELI_NAME } from './config.js';
 
 export function updateHelicopter(G, dt) {
   if (G.wanted >= HELI_MIN_WANTED) {
     if (!G.heli) {
       const a = G.rng.range(0, Math.PI * 2);
       G.heli = {
-        x: G.player.x + Math.cos(a) * 700,
-        y: G.player.y + Math.sin(a) * 700,
-        angle: 0, rotor: 0, spotAngle: 0,
+        x: G.player.x + Math.sin(a) * 45,
+        z: G.player.z + Math.cos(a) * 45,
+        y: 14,
+        angle: 0, rotor: 0,
         name: HELI_NAME, status: 'SPOTLIGHT',
       };
       if (G.audio) G.audio.rotor(true);
     }
     const h = G.heli;
     h.rotor += dt * 28;
-    // Terbang ke titik hover di atas-belakang pemain, lalu ikuti.
-    const tx = G.player.x - Math.cos(G.player.angle) * HELI_HOVER_DIST;
-    const ty = G.player.y - Math.sin(G.player.angle) * HELI_HOVER_DIST;
-    const dx = tx - h.x; const dy = ty - h.y;
-    const d = Math.hypot(dx, dy);
-    const sp = Math.min(HELI_SPEED, 120 + d * 0.6);
-    if (d > 8) {
+    // Titik hover: di depan pemain (searah hadap), supaya kerucut sorot
+    // masuk frame kamera chase yang menghadap ke depan.
+    const tx = G.player.x + Math.sin(G.player.angle) * 14;
+    const tz = G.player.z + Math.cos(G.player.angle) * 14;
+    const dx = tx - h.x;
+    const dz = tz - h.z;
+    const d = Math.hypot(dx, dz);
+    const sp = Math.min(22, 8 + d * 0.6);
+    if (d > 0.8) {
       h.x += (dx / d) * sp * dt;
-      h.y += (dy / d) * sp * dt;
+      h.z += (dz / d) * sp * dt;
     }
-    h.angle = Math.atan2(G.player.y - h.y, G.player.x - h.x);
-    h.spotAngle = h.angle;
-    // Sorot lampu bikin kamera sedikit bergetar saat heli dekat.
-    const pd = Math.hypot(G.player.x - h.x, G.player.y - h.y);
-    if (pd < 420) G.shake = Math.max(G.shake, 2.5);
+    h.y += (14 - h.y) * Math.min(1, dt * 2);
+    h.angle = Math.atan2(G.player.x - h.x, G.player.z - h.z);
+    // Sorot bikin kamera sedikit bergetar saat heli dekat.
+    if (d < 30) G.shake = Math.max(G.shake, 2.5);
   } else if (G.heli) {
     G.heli = null;
     if (G.audio) G.audio.rotor(false);

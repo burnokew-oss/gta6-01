@@ -1,5 +1,6 @@
 // Scene deterministik di balik ?shot=1|2|3|4 — mengikuti formula 4-shot
-// rank 1-3 (RANK-STUDY.md): chase sunset dulu, lalu shootout, peta, title.
+// rank 1-3 (RANK-STUDY.md): chase MALAM NEON + HUJAN (target visual
+// referensi kompetitor), lalu shootout, peta, title.
 // Tiap scene memainkan aturan sungguhan maju beberapa detik dari seed
 // tetap, jadi frame yang tertangkap adalah tampilan game yang sebenarnya.
 import { STEP } from './config.js';
@@ -31,36 +32,57 @@ function stageProgress(G) {
   G.day = 3;
 }
 
+// Satu mobil polisi bernama di posisi relatif terhadap pemain.
+function placeCopCar(G, dx, dz, angle, name, status) {
+  const v = makeVehicle(G.rng, 'police', G.player.x + dx, G.player.z + dz, angle);
+  v.ai = null;
+  v.name = name;
+  v.status = status;
+  v.dist = Math.round(Math.hypot(dx, dz));
+  v.speed = 14;
+  G.vehicles.push(v);
+  return v;
+}
+
 export function stageShot(name, G) {
   // Dunia segar untuk tiap scene.
   G.resetWorld();
   G.clock = 10 * 60; // siang cerah (diubah per scene)
   G.day = 1;
   if (name === '1') {
-    // CHASE (hero shot): sunset, wanted 4, heli + spotlight, ≥3 polisi
-    // bernama, M5 tahap kabur, dialog Dimas, NOS, speed 3 digit.
-    G.clock = 17 * 60 + 30; // senja oranye
+    // CHASE (hero shot): MALAM NEON + HUJAN ala referensi kompetitor
+    // (22:47, jalan basah memantul, papan neon), wanted 4, heli +
+    // spotlight, polisi bernama, M5 tahap kabur, dialog Dimas, NOS,
+    // speed 3 digit.
+    G.clock = 22 * 60 + 47; // malam 22:47 — neon + hujan
+    G.rain = true;
     stageProgress(G);
     G.stats.missionsDone = 4; // M5 sedang jalan
-    const car = makeVehicle(G.rng, 'sport', 2150, 1400, 0);
+    const car = makeVehicle(G.rng, 'sport', 84, 12, -Math.PI / 2);
+    car.color = 0xd42a2a;
     G.vehicles.push(car);
     G.player.vehicle = car;
     G.player.onFoot = false;
     car.driver = G.player;
-    G.player.x = car.x; G.player.y = car.y;
+    G.player.x = car.x;
+    G.player.z = car.z;
+    G.player.angle = car.angle;
     spawnTraffic(G, 8);
     spawnParked(G, 6);
     spawnPeds(G, 20);
-    G.camera.x = car.x; G.camera.y = car.y;
     G.screen = SCREEN_PLAY;
     G.coverStrip = '10 STORY MISSIONS · HELICOPTER CHASES · POLICE RESPONSE · RADIO 3 STATIONS · GARAGE UPGRADES · 3 SAVE SLOTS · 24 SHELLS';
     startMission(G, 4); // M5 — Rampok Toko
     simulate(G, 0.8, false); // sampai di toko -> tahap 2 (kabur, wanted 4)
-    // Komposisi ulang: mobil dipindah ke ujung barat jalan yang sama,
-    // sudah ngebut — frame diambil saat kecepatan masih 3 digit.
-    car.x = 900; car.y = 1400; car.angle = 0; car.speed = 420;
-    G.player.x = car.x; G.player.y = car.y;
-    G.camera.x = car.x; G.camera.y = car.y;
+    // Komposisi ulang: mobil dipindah ke jalan yang sama, sudah ngebut
+    // ke arah barat (neon CBD di depan kamera chase).
+    car.x = 60;
+    car.z = 12;
+    car.angle = -Math.PI / 2;
+    car.speed = 20;
+    G.player.x = car.x;
+    G.player.z = car.z;
+    G.player.angle = car.angle;
     G.mission.dialog = {
       speaker: 'Dimas',
       text: 'Lepas helikopter itu dulu sebelum ke garasi! Ganti mobil, ganti warna, apa saja!',
@@ -68,12 +90,45 @@ export function stageShot(name, G) {
     };
     G.mission.dialog.shown = G.mission.dialog.text.length;
     simulate(G, 2.6, true, true);
+    // Kunci komposisi akhir: wanted persis 4, kecepatan 3 digit,
+    // heli di depan-atas pemain (sorot masuk frame), 3+ mobil polisi
+    // di sekitar pemain. Pejalan kaki yang lari ke belakang mobil
+    // dibersihkan supaya tidak menutupi mobil hero.
+    G.peds = G.peds.filter((ped) => Math.hypot(ped.x - G.player.x, ped.z - G.player.z) > 8);
+    // Polisi jalan kaki disebar ke samping/depan — jangan ada yang
+    // berdiri tepat di belakang mobil (kepalanya nongol di atap).
+    const copSpots = [[-14, -6], [-18, 6], [-8, -7], [-24, -3]];
+    G.cops.forEach((c, i) => {
+      const spot = copSpots[i % copSpots.length];
+      c.x = G.player.x + spot[0];
+      c.z = G.player.z + spot[1];
+      c.dist = Math.round(Math.hypot(spot[0], spot[1]));
+    });
+    G.wanted = 4;
+    G.cops.splice(4); // panel: heli + 4 mobil + 4 polisi jalan kaki
+    car.speed = 19; // 152 km/j di speedometer
+    if (G.heli) {
+      G.heli.x = G.player.x - 20;
+      G.heli.z = G.player.z - 2;
+      G.heli.y = 17;
+    }
+    for (const v of G.vehicles) {
+      if (v.type === 'police') v.dead = true; // bersihkan hasil kejar-kejaran sim
+    }
+    G.vehicles = G.vehicles.filter((v) => !v.dead);
+    placeCopCar(G, -18, -3.5, -Math.PI / 2, 'CENDRAWASIH-07', 'PURSUIT');
+    placeCopCar(G, -24, 4, -Math.PI / 2, 'JALAK-42', 'RAMMING');
+    placeCopCar(G, -13, 0.5, -Math.PI / 2, 'BANGAU-18', 'PURSUIT');
+    placeCopCar(G, 10, -4, Math.PI / 2, 'ELANG-11', 'PURSUIT');
     return { screen: SCREEN_PLAY };
   }
   if (name === '2') {
-    // SHOOTOUT: M10 malam di gudang pelabuhan + helikopter + tembakan.
-    G.clock = 19 * 60; // malam, lampu jalan + jendela menyala
-    G.player.x = 2900; G.player.y = 2900;
+    // SHOOTOUT: M10 MALAM NEON + HUJAN di gudang pelabuhan — jalan basah
+    // memantulkan neon, musuh bertanda merah, helikopter + tembakan.
+    G.clock = 21 * 60 + 42; // malam neon 21:42
+    G.rain = true;
+    G.player.x = 78;
+    G.player.z = 100;
     G.player.weapon = 'pistol';
     G.player.ammoInMag.pistol = 12;
     G.player.ammo.pistol = 48;
@@ -84,42 +139,66 @@ export function stageShot(name, G) {
     startMission(G, 9); // M10 — Raja Teluk
     G.mission.dialog.shown = G.mission.dialog.text.length; // dialog penuh
     addWanted(G, 3); // helikopter ikut masuk frame
-    G.camera.x = G.player.x; G.camera.y = G.player.y;
     G.screen = SCREEN_PLAY;
+    // Musuh pertama tepat di depan pemain (tengah frame, bertanda merah);
+    // sisanya berbaris di jalan yang sama supaya baku tembak terbaca.
+    G.enemies.forEach((en, i) => {
+      en.x = G.player.x - 6 - i * 4;
+      en.z = G.player.z + (i % 2) * 3 - 1;
+    });
     const e = G.enemies[0];
     if (e) {
-      G.player.aimAngle = Math.atan2(e.y - G.player.y, e.x - G.player.x);
-      G.input.mouse.x = G.viewW / 2 + Math.cos(G.player.aimAngle) * 200;
-      G.input.mouse.y = G.viewH / 2 + Math.sin(G.player.aimAngle) * 200;
+      G.aimOverride = { x: e.x, z: e.z };
     }
     G.input.mouse.down = true;
     simulate(G, 1.5, false);
     G.input.mouse.down = false;
+    G.muzzleFlash = 0.07; // kilat moncong tetap menyala di frame
+    if (G.heli) {
+      G.heli.x = G.player.x - 7;
+      G.heli.z = G.player.z - 3;
+      G.heli.y = 10;
+    }
     return { screen: SCREEN_PLAY };
   }
   if (name === '3') {
-    // MAP: peta kota + daftar misi DONE/ACTIVE/LOCKED + statistik + legenda.
-    G.clock = 18 * 60 + 40;
+    // MAP: satu malam yang sama — peta kota + daftar misi
+    // DONE/ACTIVE/LOCKED + statistik + legenda.
+    G.clock = 22 * 60 + 47; // malam 22:47, konsisten dengan shot 1
     stageProgress(G);
     G.mission.index = 8; // M9 ACTIVE, M1-8 DONE, M10 LOCKED
     G.mission.started = true;
     G.mission.step = 0;
     G.mission.objective = 'Habisi 5 penjaga brankas pelabuhan';
-    G.player.x = 1650; G.player.y = 1650;
+    G.player.x = 0;
+    G.player.z = 0;
     G.shells.forEach((s, i) => { s.taken = i < 9; });
-    G.camera.x = G.player.x; G.camera.y = G.player.y;
     G.screen = SCREEN_MAP;
     return { screen: SCREEN_MAP };
   }
-  // '4': TITLE — logo gradasi + kru + Continue ber-ringkasan save.
+  // '4': TITLE — kota MALAM NEON + HUJAN yang hidup di belakang logo:
+  // mobil hero + Raka di tengah orbit, logo gradasi + kru + Continue.
+  G.clock = 21 * 60; // malam 21:00 — neon + hujan di backdrop
+  G.rain = true;
+  G.titleFixed = true; // kamera poster: mobil hero besar di kiri bawah
+  const hero = makeVehicle(G.rng, 'sport', 12, 18, -Math.PI / 2);
+  hero.color = 0xd42a2a;
+  G.vehicles.push(hero);
+  G.player.x = 18;
+  G.player.z = 20;
+  G.player.angle = Math.PI / 4; // Raka menghadap kamera, di samping mobil
+  G.player.onFoot = true;
   writeSave(0, {
-    cash: 14830, health: 82, armor: 64, x: 1650, y: 1650,
+    cash: 14830, health: 82, armor: 64, x: 0, z: 0,
     weapon: 'pistol', ammo: { pistol: 48, shotgun: 12 }, ammoInMag: { pistol: 12, shotgun: 6 },
     missionIndex: 6, missionStarted: false, wanted: 0,
     clock: 16 * 60 + 29, day: 3, rep: 1092, shells: 7,
     upgrades: {}, playSeconds: 2 * 3600 + 31 * 60,
     stats: { missionsDone: 6, takedowns: 34, carsStolen: 21, escapes: 6, shells: 7 },
   });
+  G.titleSave = {
+    cash: 14830, missionIndex: 6, day: 3, rep: 1092, shells: 7,
+  };
   simulate(G, 4, false);
   G.screen = SCREEN_TITLE;
   return { screen: SCREEN_TITLE };

@@ -1,8 +1,9 @@
 // Save/load localStorage, 3 slot. Hanya data progres, bukan seluruh dunia.
 //
-// Format di disk (tidak boleh berubah — save lama harus tetap terbaca):
-// localStorage[SAVE_KEY] = JSON array 3 elemen, tiap elemen null atau objek
-// progres + `savedAt` (string ISO). Slot kosong = null.
+// Format di disk: localStorage[SAVE_KEY] = JSON array 3 elemen, tiap
+// elemen null atau objek progres + `savedAt` (string ISO). Slot kosong
+// = null. Apa pun yang rusak dianggap "belum ada save" supaya game
+// tidak pernah crash saat load.
 import { SAVE_KEY } from './config.js';
 
 export const SLOT_COUNT = 3;
@@ -11,8 +12,6 @@ function emptySlots() {
   return Array.from({ length: SLOT_COUNT }, () => null);
 }
 
-// Parse mentah dari localStorage; apa pun yang rusak/asing dianggap
-// "belum ada save" supaya game tidak pernah crash saat load.
 function parseSaves(raw) {
   if (!raw) return emptySlots();
   try {

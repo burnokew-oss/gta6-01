@@ -1,12 +1,15 @@
-// Teluk Cerah — entrypoint penyerahan gta6-01 (Node 22, stdlib saja).
+// Teluk Cerah 3D — entrypoint penyerahan gta6-01 (Node 22, stdlib saja).
 //
-// Tugas program ini kecil dan eksplisit: periksa dulu bahwa entri lengkap
-// (game/index.html ada, tepat 4 screenshot JPG dan masing-masing tidak lebih
-// dari 256 KiB, folder game/ di bawah batas file), lalu salin game/ dan
-// screenshots/ dari sebelah file ini ke direktori output dan tulis
-// dossier.json di sana lewat library make.fun yang sudah di-vendor.
+// Program ini hanya menyerahkan entri: ia memeriksa kelengkapan paket
+// (game/index.html ada dan di bawah 1 MiB, Three.js ter-vendor, tepat 4
+// screenshot JPG masing-masing tidak lebih dari 256 KiB, folder game/
+// di bawah batas file dan byte), lalu menyalin game/ dan screenshots/
+// dari sebelah file ini ke direktori output dan menulis dossier.json di
+// sana lewat library make.fun yang sudah di-vendor.
+//
 // Game-nya sendiri statis dan offline: game/index.html + modul ES di
-// game/src/, tanpa library dan tanpa satu pun request jaringan.
+// game/src/ + Three.js r149 di game/vendor/, tanpa satu pun request
+// jaringan saat dimainkan.
 //
 // Di luar container grader, MAKEFUN_OUTPUT_DIR menggantikan /output:
 //   mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts
@@ -20,13 +23,29 @@ const here = fileURLToPath(new URL('.', import.meta.url));
 const out = process.env.MAKEFUN_OUTPUT_DIR ?? '/output';
 const gameDir = join(here, 'game');
 const shotsDir = join(here, 'screenshots');
+const GAME_MAX_FILES = 993;
+const GAME_MAX_BYTES = 50331648;
+const INDEX_MAX_BYTES = 1048576;
+const SHOT_MAX_BYTES = 262144;
 
-// Validasi 1: entrypoint game harus ada.
-if (!existsSync(join(gameDir, 'index.html'))) {
+// Validasi 1: entrypoint game harus ada dan di bawah 1 MiB.
+const indexPath = join(gameDir, 'index.html');
+if (!existsSync(indexPath)) {
   throw new Error('game/index.html tidak ditemukan — entri belum lengkap');
 }
+const indexBytes = statSync(indexPath).size;
+if (indexBytes > INDEX_MAX_BYTES) {
+  throw new Error(`game/index.html ${indexBytes} byte — melebihi 1 MiB`);
+}
 
-// Validasi 2: tepat 4 screenshot, masing-masing JPG dan <= 256 KiB.
+// Validasi 2: Three.js r149 harus ter-vendor (game tidak boleh memuat
+// library apa pun dari jaringan).
+const threePath = join(gameDir, 'vendor', 'three.min.js');
+if (!existsSync(threePath)) {
+  throw new Error('game/vendor/three.min.js tidak ditemukan — unduh Three.js r149 dulu');
+}
+
+// Validasi 3: tepat 4 screenshot, masing-masing JPG dan <= 256 KiB.
 if (!existsSync(shotsDir)) throw new Error('screenshots/ tidak ditemukan');
 const shots = readdirSync(shotsDir).filter((f) => f.toLowerCase().endsWith('.jpg')).sort();
 if (shots.length !== 4) {
@@ -34,19 +53,33 @@ if (shots.length !== 4) {
 }
 for (const shot of shots) {
   const size = statSync(join(shotsDir, shot)).size;
-  if (size > 262144) throw new Error(`screenshot ${shot} ${size} byte — melebihi 256 KiB`);
+  if (size > SHOT_MAX_BYTES) throw new Error(`screenshot ${shot} ${size} byte — melebihi 256 KiB`);
 }
 
-// Validasi 3: game/ di bawah batas file (993 file).
-function countFiles(dir) {
-  let n = 0;
+// Validasi 4: game/ di bawah batas file (993) dan byte (48 MiB).
+function measure(dir) {
+  let files = 0;
+  let bytes = 0;
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
-    n += entry.isDirectory() ? countFiles(join(dir, entry.name)) : 1;
+    const full = join(dir, entry.name);
+    if (entry.isDirectory()) {
+      const sub = measure(full);
+      files += sub.files;
+      bytes += sub.bytes;
+    } else {
+      files += 1;
+      bytes += statSync(full).size;
+    }
   }
-  return n;
+  return { files, bytes };
 }
-const gameFiles = countFiles(gameDir);
-if (gameFiles > 993) throw new Error(`game/ berisi ${gameFiles} file — melebihi 993`);
+const gameSize = measure(gameDir);
+if (gameSize.files > GAME_MAX_FILES) {
+  throw new Error(`game/ berisi ${gameSize.files} file — melebihi 993`);
+}
+if (gameSize.bytes > GAME_MAX_BYTES) {
+  throw new Error(`game/ berisi ${gameSize.bytes} byte — melebihi 48 MiB`);
+}
 
 mkdirSync(out, { recursive: true });
 cpSync(gameDir, join(out, 'game'), { recursive: true });
@@ -68,4 +101,4 @@ writeFileSync(
   }),
 );
 
-console.log(`Teluk Cerah diserahkan: ${gameFiles} file game, ${shots.length} screenshot, dossier.json ditulis.`);
+console.log(`Teluk Cerah 3D diserahkan: ${gameSize.files} file game (${gameSize.bytes} byte), ${shots.length} screenshot, dossier.json ditulis.`);

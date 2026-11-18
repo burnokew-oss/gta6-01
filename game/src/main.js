@@ -1,13 +1,13 @@
-// Boot + loop Teluk Cerah. Game state (G) dibuat di sini dan dibagikan ke semua
-// modul; stepGame() adalah satu-satunya jalan memajukan simulasi, dipakai
-// loop nyata maupun scene screenshot deterministik.
+// Boot + loop Teluk Cerah 3D. Game state (G) dibuat di sini dan dibagikan
+// ke semua modul; stepGame() adalah satu-satunya jalan memajukan simulasi,
+// dipakai loop nyata maupun scene screenshot deterministik.
 //
 // ?seed=N mengganti seed kota. ?shot=1|2|3|4 men-stage scene lalu melukisnya
-// dua kali dan menyetel window.__shotReady untuk screenshot.
-import { STEP } from './config.js';
+// dan menyetel window.__shotReady untuk screenshot.
+import { STEP, MISSION_DEFS, SHELL_COUNT } from './config.js';
 import { createRandom } from './random.js';
-import { createInput, ACTION_CONFIRM, ACTION_PAUSE, ACTION_RELOAD, ACTION_MUTE } from './input.js';
-import { createCity } from './city.js';
+import { createInput, ACTION_CONFIRM, ACTION_PAUSE, ACTION_RELOAD, ACTION_MUTE, ACTION_MAP, ACTION_TAXI, ACTION_RAMPAGE } from './input.js';
+import { createCity, createShells } from './city.js';
 import { createPlayer, updatePlayer } from './player.js';
 import { spawnTraffic, spawnParked, spawnLoanerCar, updateVehicles } from './vehicles.js';
 import { spawnPeds, updatePeds } from './pedestrians.js';
@@ -20,8 +20,6 @@ import { createHud, SCREEN_TITLE, SCREEN_PLAY, SCREEN_PAUSED, SCREEN_OVER, SCREE
 import { createAudio } from './audio.js';
 import { readSave, writeSave } from './save.js';
 import { stageShot } from './shots.js';
-import { MISSION_DEFS, SHELL_COUNT } from './config.js';
-import { districtAt, roadLines } from './city.js';
 
 const MAX_FRAME = 0.25;
 
@@ -34,25 +32,27 @@ const canvas = document.getElementById('game');
 const status = document.getElementById('status');
 const input = createInput(canvas);
 const renderer = createRenderer(canvas);
-const hud = createHud(canvas);
+const hud = createHud();
 const audio = createAudio();
 
 const G = {
   seed, rng: createRandom(seed), city: null,
   time: 0, clock: 8 * 60, day: 1,
   player: null, vehicles: [], peds: [], cops: [], enemies: [],
-  bullets: [], particles: [], skid: [], cashFloaters: [],
-  wanted: 0, wantedTimer: 0, hiddenTimer: 0, roadblock: null,
+  bullets: [], particles: [], cashFloaters: [],
+  wanted: 0, hiddenTimer: 0, roadblock: null,
   heli: null, shop: null, nosBoost: false, radioToast: null, saveNow: false,
-  coverStrip: null,
+  coverStrip: null, muzzleFlash: 0,
+  rain: false,
   rep: 0, copNameSeq: 0, playSeconds: 0,
   stats: { missionsDone: 0, takedowns: 0, carsStolen: 0, escapes: 0, shells: 0 },
   shells: [],
   mission: createMissionState(), missionDefs: MISSION_DEFS,
-  camera: { x: 900, y: 2650, zoom: 1 },
   viewW: window.innerWidth, viewH: window.innerHeight,
   shake: 0, flashRed: 0, shotsFiredTimer: 0,
   events: [], screen: SCREEN_TITLE,
+  titleSave: null, titleFixed: false, overTitle: '', overText: '',
+  aimPoint: null,
   input, audio,
 };
 
@@ -62,14 +62,13 @@ function resetWorld() {
   G.time = 0;
   G.clock = 8 * 60;
   G.day = 1;
-  G.player = createPlayer(470, 2650); // rumah Raka, Marina barat
+  G.player = createPlayer(-88, 46); // rumah Raka, Marina barat
   G.vehicles = [];
   G.peds = [];
   G.cops = [];
   G.enemies = [];
   G.bullets = [];
   G.particles = [];
-  G.skid = [];
   G.cashFloaters = [];
   G.wanted = 0;
   G.hiddenTimer = 0;
@@ -80,6 +79,8 @@ function resetWorld() {
   G.radioToast = null;
   G.saveNow = false;
   G.coverStrip = null;
+  G.muzzleFlash = 0;
+  G.rain = false;
   G.mission = createMissionState();
   G.shake = 0;
   G.flashRed = 0;
@@ -89,27 +90,14 @@ function resetWorld() {
   G.copNameSeq = 0;
   G.playSeconds = 0;
   G.stats = { missionsDone: 0, takedowns: 0, carsStolen: 0, escapes: 0, shells: 0 };
-  G.shells = [];
-  // Kerang Teluk: 24 titik di pinggir jalan, posisi dari seed yang sama.
-  {
-    const lines = roadLines();
-    for (let i = 0; i < SHELL_COUNT; i += 1) {
-      const vertical = G.rng.chance(0.5);
-      const line = G.rng.pick(lines);
-      const along = G.rng.range(200, 3000);
-      const side = G.rng.chance(0.5) ? 1 : -1;
-      G.shells.push({
-        x: vertical ? line + side * 85 : along,
-        y: vertical ? along : line + side * 85,
-        taken: false,
-      });
-    }
-  }
-  G.camera = { x: G.player.x, y: G.player.y, zoom: 1 };
+  G.shells = createShells(G.rng);
+  G.titleSave = readSave(0);
+  G.overTitle = '';
+  G.overText = '';
   spawnLoanerCar(G);
   spawnTraffic(G, 12);
   spawnParked(G, 10);
-  spawnPeds(G, 40);
+  spawnPeds(G, 36);
 }
 G.resetWorld = resetWorld;
 
@@ -117,7 +105,7 @@ function snapshot() {
   const p = G.player;
   return {
     cash: p.cash, health: p.health, armor: p.armor,
-    x: p.x, y: p.y, weapon: p.weapon,
+    x: p.x, z: p.z, weapon: p.weapon,
     ammo: p.ammo, ammoInMag: p.ammoInMag,
     missionIndex: G.mission.index, missionStarted: G.mission.started,
     wanted: G.wanted, clock: G.clock, day: G.day,
@@ -128,8 +116,11 @@ function snapshot() {
 
 function applySnapshot(s) {
   const p = G.player;
-  p.cash = s.cash; p.health = s.health; p.armor = s.armor;
-  p.x = s.x; p.y = s.y;
+  p.cash = s.cash;
+  p.health = s.health;
+  p.armor = s.armor;
+  p.x = s.x;
+  p.z = s.z;
   p.weapon = s.weapon || 'fist';
   p.ammo = s.ammo || p.ammo;
   p.ammoInMag = s.ammoInMag || p.ammoInMag;
@@ -146,7 +137,7 @@ function applySnapshot(s) {
   }
   if (s.missionIndex >= 0 && s.missionIndex < MISSION_DEFS.length) {
     startMission(G, s.missionIndex);
-    if (!s.missionStarted) { G.mission.started = false; }
+    if (!s.missionStarted) G.mission.started = false;
   }
 }
 
@@ -154,6 +145,16 @@ function drainEvents() {
   while (G.events.length) {
     const ev = G.events.shift();
     onMissionEvent(G, ev);
+    if (ev === 'wasted') {
+      G.screen = SCREEN_OVER;
+      G.overTitle = 'WASTED';
+      G.overText = 'Dirawat di rumah sakit — uang dipotong 10%.';
+    }
+    if (ev === 'busted') {
+      G.screen = SCREEN_OVER;
+      G.overTitle = 'BUSTED';
+      G.overText = 'Ditahan polisi — denda dibayar.';
+    }
   }
 }
 
@@ -161,18 +162,23 @@ function stepGame(dt) {
   G.time += dt;
   G.clock += dt * 3; // 1 hari game = 8 menit nyata
   if (G.clock >= 1440) { G.clock -= 1440; G.day += 1; }
-  const actions = input.takeActions();
+  const { actions, digit } = input.takeActions();
 
   if (G.screen === SCREEN_TITLE) {
     updateVehicles(G, dt);
     updatePeds(G, dt);
-    G.camera.x = G.player.x;
-    G.camera.y = G.player.y;
     if (actions & ACTION_CONFIRM) {
       audio.unlock();
       audio.startMusic();
       G.screen = SCREEN_PLAY;
       announce('Teluk Cerah. Temui Bu Sari — tekan Enter untuk mulai misi pertama.');
+    }
+    return;
+  }
+  if (G.screen === SCREEN_OVER) {
+    if (actions & ACTION_CONFIRM) {
+      G.screen = SCREEN_PLAY;
+      G.mission.dialog = null;
     }
     return;
   }
@@ -182,9 +188,7 @@ function stepGame(dt) {
   }
   if (G.screen === SCREEN_MAP) {
     // Peta: dunia beku; M / Esc / Enter kembali main.
-    if (actions & (ACTION_PAUSE | ACTION_CONFIRM)) G.screen = SCREEN_PLAY;
-    if (input.keys.map && !G._mapLatch) { G._mapLatch = true; G.screen = SCREEN_PLAY; }
-    if (!input.keys.map) G._mapLatch = false;
+    if (actions & (ACTION_PAUSE | ACTION_CONFIRM | ACTION_MAP)) G.screen = SCREEN_PLAY;
     return;
   }
 
@@ -192,9 +196,7 @@ function stepGame(dt) {
   G.playSeconds += dt;
   if (actions & ACTION_PAUSE) { G.screen = SCREEN_PAUSED; announce('Paused.'); return; }
   if (actions & ACTION_MUTE) audio.setMuted(!audio.isMuted());
-  // M: buka peta kota (sekali tekan).
-  if (input.keys.map && !G._mapLatch) { G._mapLatch = true; G.screen = SCREEN_MAP; announce('Peta Teluk Cerah.'); return; }
-  if (!input.keys.map) G._mapLatch = false;
+  if (actions & ACTION_MAP) { G.screen = SCREEN_MAP; announce('Peta Teluk Cerah.'); return; }
   // R: reload saat jalan kaki, ganti stasiun radio saat nyetir.
   if (actions & ACTION_RELOAD) {
     if (G.player.onFoot) reloadWeapon(G);
@@ -209,10 +211,8 @@ function stepGame(dt) {
   }
 
   // Taksi (T) / Rampage (G) — sekali tekan.
-  if (input.keys.taxi && !G._taxiLatch) { G._taxiLatch = true; startTaxi(G); }
-  if (!input.keys.taxi) G._taxiLatch = false;
-  if (input.keys.rampage && !G._rampageLatch) { G._rampageLatch = true; startRampage(G); }
-  if (!input.keys.rampage) G._rampageLatch = false;
+  if (actions & ACTION_TAXI) startTaxi(G);
+  if (actions & ACTION_RAMPAGE) startRampage(G);
 
   // Enter: dialog dulu, lalu mulai misi berikutnya.
   const m = G.mission;
@@ -226,8 +226,16 @@ function stepGame(dt) {
     }
   }
 
+  // Tombol angka: beli di toko, atau ganti senjata.
+  if (digit >= 1 && digit <= 5) {
+    if (G.shop) buyShopItem(G, digit - 1);
+    else if (digit === 1) G.player.weapon = 'fist';
+    else if (digit === 2 && (G.player.ammo.pistol + G.player.ammoInMag.pistol) > 0) G.player.weapon = 'pistol';
+    else if (digit === 3 && (G.player.ammo.shotgun + G.player.ammoInMag.shotgun) > 0) G.player.weapon = 'shotgun';
+  }
+
   // Tembak (klik kiri tahan).
-  if (G.player.onFoot && input.firing()) fireWeapon(G);
+  if (G.player.onFoot && input.mouse.down) fireWeapon(G);
 
   updatePlayer(G, dt, input, actions);
   updateVehicles(G, dt);
@@ -241,37 +249,29 @@ function stepGame(dt) {
   if (G.saveNow) {
     G.saveNow = false;
     writeSave(0, snapshot());
+    G.titleSave = readSave(0);
     announce('Disimpan di safehouse (slot 1).');
   }
 
-  // Taxi: jemput lalu antar.
+  // Taksi: jemput lalu antar.
   if (m.taxi) {
     const t = m.taxi;
-    if (t.state === 'pickup' && Math.hypot(G.player.x - t.px, G.player.y - t.py) < 60) {
+    if (t.state === 'pickup' && Math.hypot(G.player.x - t.px, G.player.z - t.pz) < 5) {
       t.state = 'dropoff';
       const a = G.rng.range(0, Math.PI * 2);
-      t.dx = Math.max(100, Math.min(3100, G.player.x + Math.cos(a) * 900));
-      t.dy = Math.max(100, Math.min(3100, G.player.y + Math.sin(a) * 900));
+      t.dx = Math.max(-110, Math.min(110, G.player.x + Math.sin(a) * 70));
+      t.dz = Math.max(-110, Math.min(110, G.player.z + Math.cos(a) * 70));
       t.fare = 60 + G.rng.int(0, 80);
       m.objective = `Taksi: antar penumpang (bayaran $${t.fare})`;
-    } else if (t.state === 'dropoff' && Math.hypot(G.player.x - t.dx, G.player.y - t.dy) < 70) {
+    } else if (t.state === 'dropoff' && Math.hypot(G.player.x - t.dx, G.player.z - t.dz) < 6) {
       G.player.cash += t.fare;
       m.banner = `TAKSI SELESAI  +$${t.fare}`;
+      m.bannerTimer = 0;
       m.taxi = null;
       m.objective = m.started ? MISSION_DEFS[m.index].steps[m.step].text : 'Tekan Enter untuk misi berikutnya';
     }
   }
 
-  // Rampage: skor dari bunuh musuh.
-  if (m.rampage) {
-    // skor dihitung dari event enemyKilled/pedKilled saat rampage aktif
-  }
-
-  // Kamera follow + zoom.
-  const targetZoom = G.player.onFoot ? 1.0 : 0.85;
-  G.camera.zoom += (targetZoom - G.camera.zoom) * Math.min(1, dt * 2);
-  G.camera.x += (G.player.x - G.camera.x) * Math.min(1, dt * 5);
-  G.camera.y += (G.player.y - G.camera.y) * Math.min(1, dt * 5);
   if (G.shake > 0) G.shake = Math.max(0, G.shake - dt * 30);
   if (G.flashRed > 0) G.flashRed = Math.max(0, G.flashRed - dt * 1.5);
   for (let i = G.cashFloaters.length - 1; i >= 0; i -= 1) {
@@ -289,33 +289,18 @@ function announce(message) {
 function drawFrame() {
   G.viewW = window.innerWidth;
   G.viewH = window.innerHeight;
-  hud.setView(G.viewW, G.viewH);
-  renderer.draw(G, G.screen);
-  if (G.screen === SCREEN_TITLE) {
-    const saves = readSave(0);
-    hud.drawTitle(G, saves);
-  } else if (G.screen === SCREEN_MAP) {
-    hud.drawMap(G);
-  } else if (G.screen === SCREEN_PAUSED) {
-    hud.drawPanel('Paused', [
-      'S — simpan ke slot 1',
-      'M — peta kota',
-      'Q — kembali ke title',
-      'N — mute',
-      'Esc — lanjut main',
-    ], 'Esc untuk lanjut');
-  } else {
-    hud.drawHud(G);
-  }
+  renderer.draw(G);
+  hud.update(G);
 }
 
 function runShot(name) {
-  const scene = stageShot(name, G);
+  stageShot(name, G);
+  renderer.snapCamera();
   let painted = 0;
   function paint() {
     drawFrame();
     painted += 1;
-    if (painted < 2) requestAnimationFrame(paint);
+    if (painted < 3) requestAnimationFrame(paint);
     else window.__shotReady = true;
   }
   requestAnimationFrame(paint);
@@ -324,6 +309,9 @@ function runShot(name) {
 function runGame() {
   let accumulator = 0;
   let last = performance.now();
+  let fpsFrames = 0;
+  let fpsStart = performance.now();
+  window.__fps = 0;
   // L: load save dari title. S/Q di pause.
   window.addEventListener('keydown', (e) => {
     if (G.screen === SCREEN_TITLE && e.code === 'KeyL') {
@@ -336,26 +324,14 @@ function runGame() {
     }
     if (G.screen === SCREEN_PAUSED && e.code === 'KeyS') {
       const ok = writeSave(0, snapshot());
+      G.titleSave = readSave(0);
       announce(ok ? 'Disimpan ke slot 1.' : 'Gagal menyimpan.');
     }
     if (G.screen === SCREEN_PAUSED && e.code === 'KeyQ') {
       G.screen = SCREEN_TITLE;
       resetWorld();
+      renderer.snapCamera();
     }
-    if (G.screen === SCREEN_PLAY && e.code === 'Digit1') {
-      if (G.shop) buyShopItem(G, 0);
-      else G.player.weapon = 'fist';
-    }
-    if (G.screen === SCREEN_PLAY && e.code === 'Digit2') {
-      if (G.shop) buyShopItem(G, 1);
-      else if (G.player.ammo.pistol > 0) G.player.weapon = 'pistol';
-    }
-    if (G.screen === SCREEN_PLAY && e.code === 'Digit3') {
-      if (G.shop) buyShopItem(G, 2);
-      else if (G.player.ammo.shotgun > 0) G.player.weapon = 'shotgun';
-    }
-    if (G.screen === SCREEN_PLAY && e.code === 'Digit4' && G.shop) buyShopItem(G, 3);
-    if (G.screen === SCREEN_PLAY && e.code === 'Digit5' && G.shop) buyShopItem(G, 4);
   });
 
   function frame(now) {
@@ -367,6 +343,12 @@ function runGame() {
       accumulator -= STEP;
     }
     drawFrame();
+    fpsFrames += 1;
+    if (now - fpsStart >= 3000) {
+      window.__fps = Math.round((fpsFrames / (now - fpsStart)) * 1000);
+      fpsFrames = 0;
+      fpsStart = now;
+    }
   }
 
   document.addEventListener('visibilitychange', () => {
@@ -379,7 +361,14 @@ function runGame() {
 
 resetWorld();
 window.__game = G;
+window.__renderer = renderer; // hook debug: inspeksi scene
 window.__shotReady = false;
 
-if (shot) runShot(shot);
-else runGame();
+if (!renderer.webglOK) {
+  document.getElementById('fallback').classList.remove('hidden');
+  document.getElementById('hud').classList.add('hidden');
+} else if (shot) {
+  runShot(shot);
+} else {
+  runGame();
+}

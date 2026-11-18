@@ -1,5 +1,9 @@
-// Misi cerita (6 misi Bu Sari + Raka), dialog typewriter, side activity
-// Taksi dan Rampage. Misi dijalankan sebagai state machine langkah-demi-langkah.
+// Misi cerita (10 misi), dialog typewriter, side activity Taksi dan
+// Rampage. Tiap misi adalah state machine langkah-demi-langkah: goto,
+// enterCar, kill, escape, route, tail, race.
+//
+// Semua jarak dalam unit dunia 3D (kota selebar 240). Checkpoint balapan
+// membentuk ring di jalan lingkar kota.
 import { MISSION_DEFS } from './config.js';
 import { spawnEnemies } from './combat.js';
 import { addWanted } from './police.js';
@@ -9,17 +13,19 @@ export function createMissionState() {
     index: 0, // misi aktif (0-based), -1 = semua selesai
     step: 0,
     started: false,
-    dialog: null, // {text, shown, speaker}
+    dialog: null, // {speaker, text, shown}
     banner: null,
+    bannerTimer: 0,
     objective: 'Temui Bu Sari — tekan Enter untuk mulai misi pertama',
     killCount: 0,
+    killTotal: 0,
     race: null,
     escapeTimer: 0,
     rampage: null,
     taxi: null,
     done: false,
     routeIndex: 0,
-    tail: null, // {vehicle, timer, seconds, radius}
+    tail: null,
   };
 }
 
@@ -34,9 +40,19 @@ export function startMission(G, index) {
   G.mission.dialog = { speaker: def.giver, text: def.intro, shown: 0 };
   G.mission.objective = def.steps[0].text;
   G.mission.banner = def.title;
+  G.mission.bannerTimer = 0;
   G.mission.routeIndex = 0;
   G.mission.tail = null;
   setupStep(G);
+}
+
+function ringPoints(cx, cz, radius, count) {
+  const pts = [];
+  for (let i = 0; i < count; i += 1) {
+    const a = (i / count) * Math.PI * 2;
+    pts.push({ x: cx + Math.sin(a) * radius, z: cz + Math.cos(a) * radius, done: false });
+  }
+  return pts;
 }
 
 function setupStep(G) {
@@ -45,8 +61,10 @@ function setupStep(G) {
   if (!step) return;
   G.mission.objective = step.text;
   if (step.type === 'kill') {
-    spawnEnemies(G, step.x, step.y, step.count, 60);
+    spawnEnemies(G, step.x, step.z, step.count, 60);
     G.mission.killCount = 0;
+    G.mission.killTotal = step.count;
+    G.mission.objective = `${step.text} — 0/${step.count} dikalahkan`;
   }
   if (step.type === 'escape') {
     addWanted(G, step.wanted);
@@ -58,40 +76,36 @@ function setupStep(G) {
     G.mission.objective = step.text.replace('%n', String(step.points.length));
   }
   if (step.type === 'tail') {
-    // Target: mobil sport merah yang keliling kota di jalur lingkar.
-    const v = { x: step.x, y: step.y, angle: 0, speed: 210, cp: 0, type: 'sport', color: '#c22e2e', len: 46, wid: 22, health: 100, dead: false, ai: null, parked: false, driver: null, flash: 0, accel: 300, top: 260, turn: 3, tailTarget: true };
-    const cx = 1650; const cy = 1650;
-    v.waypoints = [];
-    for (let i = 0; i < 8; i += 1) {
-      const a = (i / 8) * Math.PI * 2;
-      v.waypoints.push({ x: cx + Math.cos(a) * 1050, y: cy + Math.sin(a) * 1050 });
-    }
+    // Target: mobil sport merah yang keliling jalan lingkar kota.
+    const v = {
+      x: step.x, z: step.z, angle: 0, speed: 11, cp: 0, type: 'sport',
+      color: 0xc22e2e, len: 4.6, wid: 2.0, health: 100, dead: false,
+      ai: null, parked: false, driver: null, flash: 0,
+      accel: 16, top: 14, turn: 3, tailTarget: true,
+      waypoints: ringPoints(0, 0, 88, 8),
+    };
     G.vehicles.push(v);
     G.mission.tail = { vehicle: v, timer: 0, seconds: step.seconds, radius: step.radius };
     G.mission.objective = `${step.text} — 0/${step.seconds} dtk`;
   }
   if (step.type === 'race') {
     G.mission.race = {
-      checkpoints: raceCheckpoints(G),
+      checkpoints: ringPoints(0, 0, 95, step.checkpoints),
       next: 0, time: 0, rivals: spawnRacers(G),
     };
   }
 }
 
-function raceCheckpoints(G) {
-  const pts = [];
-  const cx = 1650; const cy = 1650;
-  for (let i = 0; i < 8; i += 1) {
-    const a = (i / 8) * Math.PI * 2;
-    pts.push({ x: cx + Math.cos(a) * 1100, y: cy + Math.sin(a) * 1100, done: false });
-  }
-  return pts;
-}
-
 function spawnRacers(G) {
   const rivals = [];
+  const colors = [0xc22e2e, 0x2e8a5b, 0x8a5ec2];
   for (let i = 0; i < 3; i += 1) {
-    const v = { x: 1650 + 1100 + i * 60, y: 1650 + 60, angle: 0, speed: 0, cp: 0, type: 'sport', color: ['#c22e2e', '#2e8a5b', '#8a5ec2'][i], len: 46, wid: 22, health: 100, dead: false, ai: null, parked: false, driver: null, flash: 0, accel: 340, top: 400, turn: 3 };
+    const v = {
+      x: 95 + i * 5, z: 6 + i * 2, angle: 0, speed: 0, cp: 0, type: 'sport',
+      color: colors[i], len: 4.6, wid: 2.0, health: 100, dead: false,
+      ai: null, parked: false, driver: null, flash: 0,
+      accel: 18, top: 21, turn: 3,
+    };
     rivals.push(v);
     G.vehicles.push(v);
   }
@@ -101,11 +115,8 @@ function spawnRacers(G) {
 function advanceStep(G) {
   const def = MISSION_DEFS[G.mission.index];
   G.mission.step += 1;
-  if (G.mission.step >= def.steps.length) {
-    completeMission(G);
-  } else {
-    setupStep(G);
-  }
+  if (G.mission.step >= def.steps.length) completeMission(G);
+  else setupStep(G);
 }
 
 function completeMission(G) {
@@ -114,7 +125,8 @@ function completeMission(G) {
   G.rep = (G.rep || 0) + 150;
   G.stats.missionsDone = (G.stats.missionsDone || 0) + 1;
   G.mission.banner = `MISI SELESAI — ${def.title}  +$${def.reward}`;
-  G.cashFloaters.push({ x: G.player.x, y: G.player.y - 40, text: `+$${def.reward}`, life: 1.5 });
+  G.mission.bannerTimer = 0;
+  G.cashFloaters.push({ x: G.player.x, z: G.player.z, text: `+$${def.reward}`, life: 1.5 });
   if (G.audio) G.audio.missionDone();
   G.mission.index += 1;
   G.mission.step = 0;
@@ -138,7 +150,7 @@ export function updateMissions(G, dt) {
     m.dialog.shown = Math.min(m.dialog.text.length, m.dialog.shown + dt * 45);
   }
   if (m.banner) {
-    m.bannerTimer = (m.bannerTimer || 0) + dt;
+    m.bannerTimer += dt;
     if (m.bannerTimer > 3.2) { m.banner = null; m.bannerTimer = 0; }
   }
   // Side: Rampage timer.
@@ -147,6 +159,7 @@ export function updateMissions(G, dt) {
     if (m.rampage.time <= 0) {
       G.player.cash += m.rampage.score * 5;
       m.banner = `RAMPAGE SELESAI — skor ${m.rampage.score}  +$${m.rampage.score * 5}`;
+      m.bannerTimer = 0;
       m.rampage = null;
     }
   }
@@ -159,11 +172,10 @@ export function updateMissions(G, dt) {
   if (step.type === 'enterCar') {
     if (!p.onFoot) advanceStep(G);
   } else if (step.type === 'goto') {
-    const d = Math.hypot(p.x - step.x, p.y - step.y);
-    if (d < step.r) advanceStep(G);
+    if (Math.hypot(p.x - step.x, p.z - step.z) < step.r) advanceStep(G);
   } else if (step.type === 'route') {
     const pt = step.points[m.routeIndex];
-    if (pt && Math.hypot(p.x - pt.x, p.y - pt.y) < step.r) {
+    if (pt && Math.hypot(p.x - pt.x, p.z - pt.z) < step.r) {
       m.routeIndex += 1;
       if (G.audio) G.audio.pickup();
       if (m.routeIndex >= step.points.length) advanceStep(G);
@@ -174,19 +186,22 @@ export function updateMissions(G, dt) {
     const v = t.vehicle;
     // Target melaju mengikuti waypoint lingkar kota.
     const wp = v.waypoints[v.cp % v.waypoints.length];
-    const dx = wp.x - v.x; const dy = wp.y - v.y;
-    const d = Math.hypot(dx, dy);
-    if (d < 120) { v.cp += 1; } else {
-      const want = Math.atan2(dy, dx);
+    const dx = wp.x - v.x;
+    const dz = wp.z - v.z;
+    const d = Math.hypot(dx, dz);
+    if (d < 10) {
+      v.cp += 1;
+    } else {
+      const want = Math.atan2(dx, dz);
       let da = want - v.angle;
       while (da > Math.PI) da -= Math.PI * 2;
       while (da < -Math.PI) da += Math.PI * 2;
       v.angle += Math.max(-2.4 * dt, Math.min(2.4 * dt, da));
       v.speed = Math.min(v.top, v.speed + v.accel * dt);
-      v.x += Math.cos(v.angle) * v.speed * dt;
-      v.y += Math.sin(v.angle) * v.speed * dt;
+      v.x += Math.sin(v.angle) * v.speed * dt;
+      v.z += Math.cos(v.angle) * v.speed * dt;
     }
-    const pd = Math.hypot(p.x - v.x, p.y - v.y);
+    const pd = Math.hypot(p.x - v.x, p.z - v.z);
     if (pd < t.radius) {
       t.timer += dt;
       m.objective = `${step.text} — ${Math.floor(t.timer)}/${t.seconds} dtk`;
@@ -207,20 +222,16 @@ export function updateMissions(G, dt) {
     }
     m.objective = `${step.text} — ${Math.ceil(m.escapeTimer)} dtk`;
   } else if (step.type === 'kill') {
-    if (m.killCount >= step.count) {
-      // Musuh sudah habis: lanjut.
-      advanceStep(G);
-    }
+    if (m.killCount >= step.count) advanceStep(G);
   } else if (step.type === 'race' && m.race) {
     const race = m.race;
     race.time += dt;
     const cp = race.checkpoints[race.next];
-    if (cp && Math.hypot(p.x - cp.x, p.y - cp.y) < 110) {
+    if (cp && Math.hypot(p.x - cp.x, p.z - cp.z) < 10) {
       cp.done = true;
       race.next += 1;
       if (G.audio) G.audio.pickup();
       if (race.next >= race.checkpoints.length) {
-        // Menang jika rival belum selesai.
         const rivalBest = Math.max(...race.rivals.map((r) => r.cp));
         if (race.next > rivalBest) advanceStep(G);
         else m.objective = 'Kalah balapan! Coba lagi — tekan Enter untuk ulang misi';
@@ -230,17 +241,18 @@ export function updateMissions(G, dt) {
     for (const r of race.rivals) {
       const target = race.checkpoints[Math.min(r.cp, race.checkpoints.length - 1)];
       if (!target) continue;
-      const dx = target.x - r.x; const dy = target.y - r.y;
-      const d = Math.hypot(dx, dy);
-      if (d < 110) { r.cp += 1; continue; }
-      const want = Math.atan2(dy, dx);
+      const dx = target.x - r.x;
+      const dz = target.z - r.z;
+      const d = Math.hypot(dx, dz);
+      if (d < 10) { r.cp += 1; continue; }
+      const want = Math.atan2(dx, dz);
       let da = want - r.angle;
       while (da > Math.PI) da -= Math.PI * 2;
       while (da < -Math.PI) da += Math.PI * 2;
       r.angle += Math.max(-2.4 * dt, Math.min(2.4 * dt, da));
       r.speed = Math.min(r.top, r.speed + r.accel * dt);
-      r.x += Math.cos(r.angle) * r.speed * dt;
-      r.y += Math.sin(r.angle) * r.speed * dt;
+      r.x += Math.sin(r.angle) * r.speed * dt;
+      r.z += Math.cos(r.angle) * r.speed * dt;
     }
     m.objective = `${step.text} — checkpoint ${race.next}/${race.checkpoints.length} (${Math.floor(race.time)} dtk)`;
   }
@@ -288,21 +300,22 @@ function respawn(G, where) {
   if (p.vehicle) { p.vehicle.driver = null; p.vehicle = null; }
   p.onFoot = true;
   if (where === 'hospital') {
-    p.x = 1250; p.y = 2650;
+    p.x = -10; p.z = 100;
     G.mission.banner = 'WASTED — dirawat di RS, uang dipotong 10%';
   } else {
-    p.x = 1250; p.y = 450;
+    p.x = -10; p.z = -100;
     G.mission.banner = 'BUSTED — ditahan, denda dibayar';
   }
+  G.mission.bannerTimer = 0;
   p.invuln = 2;
 }
 
 export function startTaxi(G) {
   if (G.mission.taxi) return;
-  G.mission.taxi = { px: 0, py: 0, fare: 0, state: 'pickup' };
+  G.mission.taxi = { px: 0, pz: 0, fare: 0, state: 'pickup' };
   const a = G.rng.range(0, Math.PI * 2);
-  G.mission.taxi.px = Math.max(100, Math.min(3100, G.player.x + Math.cos(a) * 600));
-  G.mission.taxi.py = Math.max(100, Math.min(3100, G.player.y + Math.sin(a) * 600));
+  G.mission.taxi.px = Math.max(-110, Math.min(110, G.player.x + Math.sin(a) * 50));
+  G.mission.taxi.pz = Math.max(-110, Math.min(110, G.player.z + Math.cos(a) * 50));
   G.mission.objective = 'Taksi: jemput penumpang (blip kuning)';
 }
 
@@ -311,4 +324,5 @@ export function startRampage(G) {
   G.mission.rampage = { time: 60, score: 0 };
   addWanted(G, 2);
   G.mission.banner = 'RAMPAGE! 60 detik chaos — hancurkan sebanyak mungkin!';
+  G.mission.bannerTimer = 0;
 }

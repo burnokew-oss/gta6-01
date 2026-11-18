@@ -1,4 +1,4 @@
-// Radio mobil Teluk Cerah: 3 stasiun, masing-masing pola nada + gelombang
+// Radio Teluk Cerah: 3 stasiun, masing-masing pola nada + gelombang
 // sendiri dan satu lagu yang sedang diputar (judul + artis).
 // Pola nada dipakai audio.js (WebAudio synth, tanpa file audio);
 // nama + lagu dipakai HUD. Stasiun diganti tombol R saat nyetir.
